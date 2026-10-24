@@ -56,7 +56,7 @@ function txSub(t){
   else parts.push(TYPE_LABEL[t.type]);
   return parts.join(' · ');
 }
-const fundTag = t => t.type!=='expense' ? '' : t.fundedFrom ? '<span class="tag warn">dari aset</span>' : W(t.wallet).role==='savings' ? '<span class="tag warn">luar budget</span>' : '';
+const fundTag = t => t.type!=='expense' ? '' : t.fundedFrom ? '<span class="tag warn">dari aset</span>' : (W(t.wallet).role||'budget')!=='budget' ? '<span class="tag warn">luar budget</span>' : '';
 function txRow(t){
   return `<button class="row" data-act="tx" data-id="${t.id}">${txTile(t)}<div class="mid"><div class="t1">${esc(t.note||cat(t.cat,t.type).label)}</div><div class="t2">${av(t.owner)}<span>${txSub(t)}</span>${t.source==='telegram'?'<span class="tag tg">VN</span>':''}${fundTag(t)}${t.debt?'<span class="tag">cicilan</span>':''}</div></div>${amtChip(t)}</button>`;
 }
@@ -85,7 +85,7 @@ function vHome(){
   const bud = budgetFor(CUR_MONTH), port = portfolio(null);
   const remain = bud.total - f.budgetExp, usedP = pct(f.budgetExp,bud.total);
   const tot = now.wallets+now.invest+now.recv;
-  const seg = [[now.cashBudget,'var(--s1)','Kas budget'],[now.harta,'var(--s4)','Harta'],[now.recv,'var(--s3)','Piutang']];
+  const seg = [[now.cashBudget,'var(--s1)','Kas & bank'],[now.harta,'var(--s4)','Harta'],[now.recv,'var(--s3)','Piutang']];
   const pend = S.pending.length;
   const onboard = !S.wallets.length ? `<section class="tray">${trayH('Mulai di sini','',`Tiga langkah supaya angka di aplikasi ini sesuai kenyataan`)}<div class="card list">
       <button class="row" data-act="walletForm"><span class="tile">💳</span><div class="mid"><div class="t1">1. Tambah dompet & saldo awal</div><div class="t2">Rekening, e-wallet, tunai — isi saldo per tanggal mulai</div></div>${I('fwd','sm')}</button>
@@ -185,7 +185,7 @@ function trayInsights(){
 function trayWealth(series){
   const vals=series.map(p=>p.total), last=series[series.length-1], prev=series[series.length-2], first=series[0];
   CHARTS.wealth={ draw: el=>drawLine(el,{values:vals,labels:series.map(p=>p.short),color:'var(--ink)',height:190}),
-    tip: i=>{ const p=series[i]; return `<div class="th">${p.label} · ${fDate(p.date)}</div>${tipRow('var(--s1)','Kas budget',rpc(p.cashBudget))}${tipRow('var(--s4)','Harta',rpc(p.harta))}${tipRow('var(--s3)','Piutang',rpc(p.recv))}${p.liab?tipRow('var(--neg)','Utang',rpc(-p.liab)):''}${tipRow('','Total',rp(p.total))}`; } };
+    tip: i=>{ const p=series[i]; return `<div class="th">${p.label} · ${fDate(p.date)}</div>${tipRow('var(--s1)','Kas & bank',rpc(p.cashBudget))}${tipRow('var(--s4)','Harta',rpc(p.harta))}${tipRow('var(--s3)','Piutang',rpc(p.recv))}${p.liab?tipRow('var(--neg)','Utang',rpc(-p.liab)):''}${tipRow('','Total',rp(p.total))}`; } };
   const cell=(k,v,d)=>`<div><div class="k">${k}</div><div class="v">${v}</div>${d?`<div style="font-size:12.5px;margin-top:2px">${d}</div>`:''}</div>`;
   return `<section class="tray">${trayH('Tren kekayaan','',`Direkonstruksi dari saldo awal + seluruh transaksi`)}<div class="card">
     <div class="pad" style="padding-bottom:6px"><div class="chart" data-chart="wealth"></div></div>
@@ -200,7 +200,7 @@ function trayWealth(series){
 }
 
 function fundSplit(f, compact){
-  const rows=[['var(--s1)','Dari budget bulanan',f.budgetExp,'Dompet berperan budget'],['var(--s4)','Dari tabungan / dana darurat',f.savingsExp,S.wallets.filter(w=>w.role==='savings'&&!w.archived).map(w=>w.short).join(', ')||'—'],['var(--s3)','Dari hasil jual aset',f.assetExp,'Ditandai saat mencatat']].filter((r,i)=>i===0||r[2]);
+  const rows=[['var(--s1)','Dari budget bulanan',f.budgetExp,'Dompet berperan budget'],['var(--s4)','Dari dompet luar budget',f.savingsExp,S.wallets.filter(w=>(w.role||'budget')!=='budget'&&!w.archived).map(w=>w.short).join(', ')||'—'],['var(--s3)','Dari hasil jual aset',f.assetExp,'Ditandai saat mencatat']].filter((r,i)=>i===0||r[2]);
   return `<div class="comp" style="margin:0;height:12px">${rows.map(r=>`<span style="flex:${Math.max(r[2],0)};background:${r[0]}"></span>`).join('')}</div>
     <div class="alloc">${rows.map(r=>`<div><i class="sw" style="background:${r[0]}"></i><span>${r[1]}${compact?'':`<small class="mut" style="display:block;font-size:12px">${esc(r[3])}</small>`}</span><b class="m">${rpc(r[2])}</b><span class="mut" style="flex:none;width:42px;text-align:right">${f.expense?idn(r[2]/f.expense*100):0}%</span></div>`).join('')}
     <div style="border-top:1px solid var(--line);padding-top:8px"><span style="flex:1"><b>Total pengeluaran</b></span><b class="m">${rpc(f.expense)}</b><span style="flex:none;width:42px"></span></div></div>`;
@@ -208,7 +208,7 @@ function fundSplit(f, compact){
 function trayFunding(){
   const f=flows(CUR_MONTH); const ent=Object.entries(f.byWallet).sort((a,b)=>b[1]-a[1]);
   const top=ent.slice(0,4), other=ent.slice(4).reduce((s,e)=>s+e[1],0); const cols=['var(--s1)','var(--s2)','var(--s3)','var(--s4)','var(--s5)'];
-  const items=top.map((e,i)=>({label:W(e[0]).short+(W(e[0]).role==='savings'?' · tabungan':''),v:e[1],c:cols[i]})); if(other) items.push({label:'Lainnya',v:other,c:cols[4]});
+  const items=top.map((e,i)=>({label:W(e[0]).short+({savings:' · tabungan',transit:' · transit'}[W(e[0]).role]||''),v:e[1],c:cols[i]})); if(other) items.push({label:'Lainnya',v:other,c:cols[4]});
   return `<section class="tray">${trayH('Sumber dana pengeluaran','',`${fMonth(CUR_MONTH)} · budget vs luar budget (harta)`)}<div class="card pad" style="display:flex;flex-direction:column;gap:14px">
     ${fundSplit(f)}
     <div class="flbl">Per dompet pembayar</div>
@@ -301,7 +301,7 @@ function wCard(w,b,stack){
   const light = ['bri','jago'].includes(w.brand);
   const owners = w.owner==='both'?Object.keys(MEMBERS):[w.owner];
   const wm = w.brand==='bca' && /xpresi/i.test(w.name) ? `<small>Tahapan</small>Xpresi BCA` : w.brand==='cash' ? '💵 Tunai' : esc(w.short);
-  return `<button class="wcard w-${w.brand} ${light?'light':''}" data-act="wallet" data-id="${w.id}"><span class="wm">${wm}</span><span class="bal m">${rp(b)}</span><span class="meta">${esc(w.name)} · ${w.acct?'•••• '+esc(w.acct.slice(-4)):({bank:'Rekening bank',ewallet:'E-wallet',cash:'Tunai',custom:'Lainnya'})[w.type]||w.type}</span><span class="own">${w.role==='savings'?'<span class="tag" style="background:rgba(255,255,255,.22);color:inherit;margin-right:6px">Tabungan</span>':''}${owners.map(o=>av(o)).join('')}</span></button>`;
+  return `<button class="wcard w-${w.brand} ${light?'light':''}" data-act="wallet" data-id="${w.id}"><span class="wm">${wm}</span><span class="bal m">${rp(b)}</span><span class="meta">${esc(w.name)} · ${w.acct?'•••• '+esc(w.acct.slice(-4)):({bank:'Rekening bank',ewallet:'E-wallet',cash:'Tunai',custom:'Lainnya'})[w.type]||w.type}</span><span class="own">${w.role&&w.role!=='budget'?`<span class="tag" style="background:rgba(255,255,255,.22);color:inherit;margin-right:6px">${w.role==='savings'?'Tabungan':'Transit'}</span>`:''}${owners.map(o=>av(o)).join('')}</span></button>`;
 }
 function vWallets(){
   const b=balances(null); const act=S.wallets.filter(w=>!w.archived), arch=S.wallets.filter(w=>w.archived);
@@ -338,7 +338,7 @@ function vInvest(){
       <div><div class="m num" style="font-size:30px;font-weight:750;letter-spacing:-.03em">${rp(htot)}</div><div class="${p.unreal>=0?'pos':'neg'}" style="font-size:13.5px;margin-top:2px"><span class="m">${rp(p.unreal,{sign:true})}</span> (${pctS(p.unrealPct)}) investasi dari harga beli</div></div>
       <div class="comp" style="margin:0;height:10px">${hseg.map(x=>`<span style="flex:${x.v};background:${x.c}"></span>`).join('')}</div>
       <div class="alloc">${hseg.map(x=>`<div><i class="sw" style="background:${x.c}"></i><span>${esc(x.l)}</span><b class="m">${rpc(x.v)}</b><span class="mut" style="flex:none;width:42px;text-align:right">${idn(x.v/htot*100)}%</span></div>`).join('')}</div>
-      <p class="note">Sama dengan "Total harta" di spreadsheet lama. Kekayaan bersih di Beranda = harta ini + kas budget (dompet non-tabungan) + piutang − utang.</p>
+      <p class="note">Sama dengan "Total harta" di spreadsheet lama. Kekayaan bersih di Beranda = harta ini + kas & bank lain (dompet budget & transit) + piutang − utang.</p>
     </div></section>`;
   return `<div class="cols"><div class="col">
     ${hartaTray}
