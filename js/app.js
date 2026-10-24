@@ -13,7 +13,7 @@ const UI = {
 };
 const VIEWS = {
   home:{t:'Beranda', f:vHome, nav:'home'}, history:{t:'Riwayat', f:vHistory, nav:'history'}, wallets:{t:'Dompet', f:vWallets, nav:'wallets'},
-  invest:{t:'Investasi', f:vInvest, nav:'invest'}, invDetail:{t:'', f:()=>vInvDetail(UI.param), back:'invest', nav:'invest'},
+  invest:{t:'Harta & investasi', f:vInvest, nav:'invest'}, invDetail:{t:'', f:()=>vInvDetail(UI.param), back:'invest', nav:'invest'},
   recv:{t:'Piutang', f:vRecv, nav:'recv'}, debts:{t:'Utang & cicilan', f:vDebts, nav:'debts'}, budget:{t:'Budget', f:vBudget, nav:'budget'}, goals:{t:'Tujuan', f:vGoals, nav:'goals'},
   income:{t:'Pemasukan', f:()=>vFlow('income'), nav:'income'}, expense:{t:'Pengeluaran', f:()=>vFlow('expense'), nav:'expense'},
   inbox:{t:'Inbox suara', f:vInbox, nav:'inbox'}, recurring:{t:'Berulang', f:vRecurring, nav:'recurring'}, settings:{t:'Pengaturan', f:vSettings, nav:'settings'}, menu:{t:'Menu', f:vMenu, nav:'menu'},
@@ -48,7 +48,7 @@ function renderShell(){
       <div class="brandmark"><span class="lg">KK</span><div><b>${esc(S.household.name)}</b><span>${fDate(TODAY)}</span></div></div>
       <button class="btn pri addbtn" data-act="add">${I('plus','sm')} Catat transaksi</button>
       ${sideItem('home','home','Beranda')}${sideItem('history','history','Riwayat')}${sideItem('inbox','mic','Inbox suara')}
-      <div class="sec">Uang & aset</div>${sideItem('wallets','card','Dompet')}${sideItem('invest','trend','Investasi')}${sideItem('recv','coins','Piutang')}${sideItem('debts','card','Utang & cicilan')}
+      <div class="sec">Uang & aset</div>${sideItem('wallets','card','Dompet')}${sideItem('invest','trend','Harta & investasi')}${sideItem('recv','coins','Piutang')}${sideItem('debts','receipt','Utang & cicilan')}
       <div class="sec">Arus & rencana</div>${sideItem('income','arrin','Pemasukan')}${sideItem('expense','arrout','Pengeluaran')}${sideItem('budget','gauge','Budget')}${sideItem('recurring','repeat','Berulang')}${sideItem('goals','target','Tujuan')}
       <div class="sec">Lainnya</div>${sideItem('settings','sliders','Pengaturan')}
       <div class="me">${av(S.user,'md')}<div><b>${esc(MEMBERS[S.user].name)}</b>${esc(S.email)}</div></div>

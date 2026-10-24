@@ -26,6 +26,7 @@ const IP = {
   archive:'<rect x="2" y="3" width="20" height="5" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/>',
   refresh:'<path d="M21 12a9 9 0 1 1-2.6-6.4L21 8"/><path d="M21 3v5h-5"/>', play:'<path d="M7 4v16l13-8z"/>', pause:'<path d="M7 4h4v16H7zM14 4h4v16h-4z"/>',
   spark:'<path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/>', users:'<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/>',
+  receipt:'<path d="M6 2.5h12v19l-3-2-3 2-3-2-3 2z"/><path d="M9 7.5h6M9 11.5h6M9 15.5h3.5"/>',
   lock:'<rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>', alert:'<path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/>',
 };
 const I = (n,c='') => `<svg class="i ${c}" viewBox="0 0 24 24" aria-hidden="true">${IP[n]||''}</svg>`;
@@ -84,7 +85,7 @@ function vHome(){
   const bud = budgetFor(CUR_MONTH), port = portfolio(null);
   const remain = bud.total - f.budgetExp, usedP = pct(f.budgetExp,bud.total);
   const tot = now.wallets+now.invest+now.recv;
-  const seg = [[now.wallets,'var(--s1)','Kas & bank'],[now.invest,'var(--s4)','Investasi'],[now.recv,'var(--s3)','Piutang']];
+  const seg = [[now.cashBudget,'var(--s1)','Kas budget'],[now.harta,'var(--s4)','Harta'],[now.recv,'var(--s3)','Piutang']];
   const pend = S.pending.length;
   const onboard = !S.wallets.length ? `<section class="tray">${trayH('Mulai di sini','',`Tiga langkah supaya angka di aplikasi ini sesuai kenyataan`)}<div class="card list">
       <button class="row" data-act="walletForm"><span class="tile">💳</span><div class="mid"><div class="t1">1. Tambah dompet & saldo awal</div><div class="t2">Rekening, e-wallet, tunai — isi saldo per tanggal mulai</div></div>${I('fwd','sm')}</button>
@@ -98,11 +99,11 @@ function vHome(){
       <div class="big">${M(now.total)}</div>
       <div class="chg"><span class="hpill ${chg>=0?'up':'dn'}">${chg>=0?'▲':'▼'} ${MC(chg,{sign:true})} (${pctS(chgP)})</span><span>vs ${prev.label.toLowerCase()}</span></div>
       <div class="comp">${seg.map(s=>`<span style="flex:${Math.max(s[0],0)};background:${s[1]}"></span>`).join('')}</div>
-      <div class="comp-l">${seg.map(s=>`<div><i class="sw" style="background:${s[1]}"></i><span>${s[2]}<b>${MC(s[0])}</b></span></div>`).join('')}<div><i class="sw" style="background:var(--on-hero3)"></i><span>Liabilitas<b>${MC(now.liab)}</b></span></div></div>
+      <div class="comp-l">${seg.map(s=>`<div><i class="sw" style="background:${s[1]}"></i><span>${s[2]}<b>${MC(s[0])}</b></span></div>`).join('')}<div><i class="sw" style="background:var(--on-hero3)"></i><span>Utang<b>${now.liab?'−':''}${MC(now.liab)}</b></span></div></div>
     </section>
     ${pend?`<button class="vnb" data-act="go" data-v="inbox"><span class="ic">${I('mic','sm')}</span><div><b>${pend} catatan suara menunggu review</b><span>Dari Telegram — cek dulu, baru tercatat</span></div>${I('fwd','sm')}</button>`:''}
     <div class="shortcuts mobile-only">
-      ${[['invest','trend','Investasi'],['budget','gauge','Budget'],['recv','coins','Piutang'],['goals','target','Tujuan'],['inbox','mic','Suara']].map(s=>`<button class="sc" data-act="go" data-v="${s[0]}"><span class="ic">${I(s[1],'sm')}</span>${s[2]}${s[0]==='inbox'&&pend?`<span class="dot-badge">${pend}</span>`:''}</button>`).join('')}
+      ${[['invest','trend','Harta'],['budget','gauge','Budget'],['recv','coins','Piutang'],['debts','receipt','Utang'],['goals','target','Tujuan']].map(s=>`<button class="sc" data-act="go" data-v="${s[0]}"><span class="ic">${I(s[1],'sm')}</span>${s[2]}${s[0]==='inbox'&&pend?`<span class="dot-badge">${pend}</span>`:''}</button>`).join('')}
     </div>
     <div class="stats">
       <button class="stat" data-act="go" data-v="income"><span class="k"><span class="k-ico" style="background:var(--pos-s);color:var(--pos)">${I('arrin','xs')}</span>Pemasukan ${MON[TODAY_DAY?Number(CUR_MONTH.slice(5))-1:0]}</span><span class="v">${MC(f.income)}</span><span class="d">${deltaTag(f.income,fPrevSame.income,true)} <span class="mut">vs 1–${TODAY_DAY} ${fMon(prevMonth(CUR_MONTH))}</span></span></button>
@@ -184,7 +185,7 @@ function trayInsights(){
 function trayWealth(series){
   const vals=series.map(p=>p.total), last=series[series.length-1], prev=series[series.length-2], first=series[0];
   CHARTS.wealth={ draw: el=>drawLine(el,{values:vals,labels:series.map(p=>p.short),color:'var(--ink)',height:190}),
-    tip: i=>{ const p=series[i]; return `<div class="th">${p.label} · ${fDate(p.date)}</div>${tipRow('var(--s1)','Kas & bank',rpc(p.wallets))}${tipRow('var(--s4)','Investasi',rpc(p.invest))}${tipRow('var(--s3)','Piutang',rpc(p.recv))}${p.liab?tipRow('var(--neg)','Utang',rpc(-p.liab)):''}${tipRow('','Total',rp(p.total))}`; } };
+    tip: i=>{ const p=series[i]; return `<div class="th">${p.label} · ${fDate(p.date)}</div>${tipRow('var(--s1)','Kas budget',rpc(p.cashBudget))}${tipRow('var(--s4)','Harta',rpc(p.harta))}${tipRow('var(--s3)','Piutang',rpc(p.recv))}${p.liab?tipRow('var(--neg)','Utang',rpc(-p.liab)):''}${tipRow('','Total',rp(p.total))}`; } };
   const cell=(k,v,d)=>`<div><div class="k">${k}</div><div class="v">${v}</div>${d?`<div style="font-size:12.5px;margin-top:2px">${d}</div>`:''}</div>`;
   return `<section class="tray">${trayH('Tren kekayaan','',`Direkonstruksi dari saldo awal + seluruh transaksi`)}<div class="card">
     <div class="pad" style="padding-bottom:6px"><div class="chart" data-chart="wealth"></div></div>
@@ -330,7 +331,17 @@ function vInvest(){
   const types=Object.keys(INV_TYPES).filter(t=>p.byType[t]);
   CHARTS.alloc={ draw: el=>drawDonut(el,{values:types.map(t=>p.byType[t]),colors:types.map(t=>INV_TYPES[t].color),centerLabel:'Total',centerValue:rpc(p.value)}), tip:i=>`<div class="th">${INV_TYPES[types[i]].label}</div>${tipRow(INV_TYPES[types[i]].color,'Nilai',rp(p.byType[types[i]]))}${tipRow('','Porsi',idn(p.byType[types[i]]/p.value*100,1)+'%')}` };
   const list=S.investments.filter(i=>UI.invFilter==='all'||i.type===UI.invFilter);
+  const bal=balances(null), sav=S.wallets.filter(w=>w.role==='savings'&&!w.archived);
+  const hseg=[...sav.map((w,k)=>({l:w.short==='BSI'||sav.length===1?'Cash ('+w.short+')':w.short,v:bal[w.id],c:k?'var(--s5)':'var(--pos)'})), ...types.map(t=>({l:INV_TYPES[t].label,v:p.byType[t],c:INV_TYPES[t].color}))].filter(x=>x.v>0);
+  const htot=hseg.reduce((a,x)=>a+x.v,0);
+  const hartaTray = `<section class="tray">${trayH('Kondisi harta','',`Dompet tabungan + investasi · per ${fDate(TODAY)}`)}<div class="card pad" style="display:flex;flex-direction:column;gap:12px">
+      <div><div class="m num" style="font-size:30px;font-weight:750;letter-spacing:-.03em">${rp(htot)}</div><div class="${p.unreal>=0?'pos':'neg'}" style="font-size:13.5px;margin-top:2px"><span class="m">${rp(p.unreal,{sign:true})}</span> (${pctS(p.unrealPct)}) investasi dari harga beli</div></div>
+      <div class="comp" style="margin:0;height:10px">${hseg.map(x=>`<span style="flex:${x.v};background:${x.c}"></span>`).join('')}</div>
+      <div class="alloc">${hseg.map(x=>`<div><i class="sw" style="background:${x.c}"></i><span>${esc(x.l)}</span><b class="m">${rpc(x.v)}</b><span class="mut" style="flex:none;width:42px;text-align:right">${idn(x.v/htot*100)}%</span></div>`).join('')}</div>
+      <p class="note">Sama dengan "Total harta" di spreadsheet lama. Kekayaan bersih di Beranda = harta ini + kas budget (dompet non-tabungan) + piutang − utang.</p>
+    </div></section>`;
   return `<div class="cols"><div class="col">
+    ${hartaTray}
     <section class="tray">${trayH('Portofolio',`<div class="seg"><button class="${!ret?'on':''}" data-act="invMode" data-k="value">Nilai</button><button class="${ret?'on':''}" data-act="invMode" data-k="return">Return</button></div>`)}<div class="card">
       <div class="ovw"><div class="v">${ret?`<span class="${p.unreal>=0?'pos':'neg'}">${M(p.unreal,{sign:true})}</span>`:M(p.value)}</div><div class="mut" style="font-size:13.5px;margin-top:2px">${ret?`${pctS(p.unrealPct)} dari modal ${rpc(p.cost)}`:`Modal ${rpc(p.cost)} · ${S.investments.length} aset`}</div>
       <div class="chart" data-chart="port" style="margin-top:12px"></div></div>
@@ -572,6 +583,6 @@ function vRecurring(){
 }
 function vMenu(){
   const p=portfolio(null), b=budgetFor(CUR_MONTH), f=flows(CUR_MONTH);
-  const items=[['invest','trend','Investasi',rpc(p.value)],['recv','coins','Piutang',rpc(recvTotal(null))],['debts','card','Utang & cicilan',rpc(debtTotal(null))],['budget','gauge','Budget',b.any?'sisa '+rpc(b.total-f.budgetExp):'belum diatur'],['goals','target','Tujuan',S.goals.length+' tujuan'],['income','arrin','Pemasukan',rpc(f.income)],['expense','arrout','Pengeluaran',rpc(f.expense)],['inbox','mic','Inbox suara',S.pending.length+' menunggu'],['recurring','repeat','Berulang','budget & transaksi rutin'],['settings','sliders','Pengaturan','Tema, kategori, anggota']];
+  const items=[['invest','trend','Harta & investasi',rpc(wealthAt(null).harta)],['recv','coins','Piutang',rpc(recvTotal(null))],['debts','receipt','Utang & cicilan',rpc(debtTotal(null))],['budget','gauge','Budget',b.any?'sisa '+rpc(b.total-f.budgetExp):'belum diatur'],['goals','target','Tujuan',S.goals.length+' tujuan'],['income','arrin','Pemasukan',rpc(f.income)],['expense','arrout','Pengeluaran',rpc(f.expense)],['inbox','mic','Inbox suara',S.pending.length+' menunggu'],['recurring','repeat','Berulang','budget & transaksi rutin'],['settings','sliders','Pengaturan','Tema, kategori, anggota']];
   return `<div class="stats">${items.map(i=>`<button class="stat" data-act="go" data-v="${i[0]}" style="padding:16px"><span class="k-ico" style="width:40px;height:40px;border-radius:13px;background:var(--chip);color:var(--ink)">${I(i[1],'sm')}</span><span style="font-weight:700;font-size:15.5px;margin-top:10px">${i[2]}</span><span class="mut m" style="font-size:13px">${i[3]}</span></button>`).join('')}</div>`;
 }

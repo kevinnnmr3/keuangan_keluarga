@@ -177,7 +177,9 @@ const debtTotal = upto => (S.debts||[]).reduce((s,d)=>s+debtInfo(d,upto).out,0);
 /* ---------- kekayaan ---------- */
 function wealthAt(upto){
   const w = walletTotal(upto), p = portfolio(upto).value, r = recvTotal(upto), l = debtTotal(upto);
-  return { wallets:w, invest:p, recv:r, liab:l, total:w+p+r-l };
+  const b = balances(upto); const savings = S.wallets.filter(x=>x.role==='savings').reduce((s,x)=>s+b[x.id],0);
+  // harta = dompet tabungan + investasi (sama dengan "Total harta" di spreadsheet lama); kas budget = dompet lain
+  return { wallets:w, invest:p, recv:r, liab:l, savings, cashBudget:w-savings, harta:savings+p, total:w+p+r-l };
 }
 function wealthSeries(){ // rekonstruksi dari ledger lengkap: akhir tiap bulan sejak saldo awal
   const pts = [{ label:'Saldo awal', short:fDate(dAdd(LEDGER_START,-1)).replace(/ \d{4}$/,''), date:dAdd(LEDGER_START,-1), ...wealthAt(dAdd(LEDGER_START,-1)) }];

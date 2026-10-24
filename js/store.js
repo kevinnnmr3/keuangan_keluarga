@@ -12,7 +12,7 @@ let MEMBERS = {};      // id anggota -> {id, name, email, color, defWallet, user
 
 const INV_TYPES = {
   gold:{label:'Emas', color:'var(--s4)'}, fund:{label:'Reksa Dana', color:'var(--s1)'},
-  stock:{label:'Saham', color:'var(--s2)'}, deposit:{label:'Deposito', color:'var(--s3)'}, other:{label:'Lainnya', color:'var(--s5)'},
+  stock:{label:'Saham', color:'var(--s2)'}, deposit:{label:'Koperasi / deposito', color:'var(--s3)'}, other:{label:'Lainnya', color:'var(--s5)'},
 };
 
 function localStamp(iso){ const d=new Date(iso); return dISO(d)+'T'+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); }
