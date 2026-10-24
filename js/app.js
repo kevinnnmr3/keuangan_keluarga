@@ -16,7 +16,7 @@ const VIEWS = {
   invest:{t:'Investasi', f:vInvest, nav:'invest'}, invDetail:{t:'', f:()=>vInvDetail(UI.param), back:'invest', nav:'invest'},
   recv:{t:'Piutang', f:vRecv, nav:'recv'}, budget:{t:'Budget', f:vBudget, nav:'budget'}, goals:{t:'Tujuan', f:vGoals, nav:'goals'},
   income:{t:'Pemasukan', f:()=>vFlow('income'), nav:'income'}, expense:{t:'Pengeluaran', f:()=>vFlow('expense'), nav:'expense'},
-  inbox:{t:'Inbox suara', f:vInbox, nav:'inbox'}, settings:{t:'Pengaturan', f:vSettings, nav:'settings'}, menu:{t:'Menu', f:vMenu, nav:'menu'},
+  inbox:{t:'Inbox suara', f:vInbox, nav:'inbox'}, recurring:{t:'Berulang', f:vRecurring, nav:'recurring'}, settings:{t:'Pengaturan', f:vSettings, nav:'settings'}, menu:{t:'Menu', f:vMenu, nav:'menu'},
 };
 const MOBILE_NAV = { home:'home', history:'history', wallets:'wallets' };
 
@@ -49,7 +49,7 @@ function renderShell(){
       <button class="btn pri addbtn" data-act="add">${I('plus','sm')} Catat transaksi</button>
       ${sideItem('home','home','Beranda')}${sideItem('history','history','Riwayat')}${sideItem('inbox','mic','Inbox suara')}
       <div class="sec">Uang & aset</div>${sideItem('wallets','card','Dompet')}${sideItem('invest','trend','Investasi')}${sideItem('recv','coins','Piutang')}
-      <div class="sec">Arus & rencana</div>${sideItem('income','arrin','Pemasukan')}${sideItem('expense','arrout','Pengeluaran')}${sideItem('budget','gauge','Budget')}${sideItem('goals','target','Tujuan')}
+      <div class="sec">Arus & rencana</div>${sideItem('income','arrin','Pemasukan')}${sideItem('expense','arrout','Pengeluaran')}${sideItem('budget','gauge','Budget')}${sideItem('recurring','repeat','Berulang')}${sideItem('goals','target','Tujuan')}
       <div class="sec">Lainnya</div>${sideItem('settings','sliders','Pengaturan')}
       <div class="me">${av(S.user,'md')}<div><b>${esc(MEMBERS[S.user].name)}</b>${esc(S.email)}</div></div>
     </aside>
@@ -74,7 +74,7 @@ function renderTop(){
     : `<div class="ttl"><h1>${v.t}</h1></div>${right}${['history','income','expense','wallets'].includes(UI.view)?`<button class="btn pri sm desk-only" data-act="add" ${UI.view==='income'?'data-type="income"':''}>${I('plus','sm')} Catat</button>`:''}`;
 }
 function renderView(keepScroll){
-  const y=scrollY;
+  const y=scrollY; tipHide();
   renderTop();
   const v=VIEWS[UI.view];
   try { document.getElementById('view').innerHTML = `<div class="view">${v.f()}</div>`; }
@@ -265,16 +265,16 @@ function sheetRecvPay(id){
 /* ---------- sheet: budget, tujuan, kategori, berulang, drilldown ---------- */
 function sheetBudget(){
   const m=UI.budgetMonth, bud=budgetFor(m), has=bud.overridden;
-  const leafIn = (c,label) => `<div class="row" style="padding:8px 14px 8px ${label?'16px':'30px'}"><div class="mid"><div class="t1" style="font-size:14px">${c.icon} ${esc(c.label)}</div></div><input class="inp" style="width:140px;height:40px;text-align:right" name="c_${c.id}" inputmode="numeric" data-money placeholder="—" value="${bud.cats[c.id]?idn(bud.cats[c.id]):''}" aria-label="Budget ${esc(c.label)}"></div>`;
+  const leafIn = (c,top) => `<div class="row" style="padding:8px 14px 8px ${top?'16px':'30px'}"><div class="mid"><div class="t1" style="font-size:14px">${c.icon} ${esc(c.label)}</div>${c.budget && !has?'':c.budget?`<div class="t2">berulang ${rpc(c.budget)}</div>`:''}</div><input class="inp" style="width:140px;height:40px;text-align:right" name="c_${c.id}" inputmode="numeric" data-money placeholder="—" value="${bud.cats[c.id]?idn(bud.cats[c.id]):''}" aria-label="Budget ${esc(c.label)}"></div>`;
   const rows = groupCats('expense').map(g=>{ const kids=kidsOf(g.id,'expense'); if(!kids.length) return leafIn(g,true);
     return `<div class="row" style="padding:10px 14px 4px;border-top:1px solid var(--line)"><div class="mid"><div class="t1" style="font-size:12.5px;color:var(--ink3);font-weight:700">${g.icon} ${esc(g.label).toUpperCase()}</div></div></div>${kids.map(c=>leafIn(c)).join('')}`; }).join('');
-  openSheet('Budget '+fMonth(m), `<form class="form" data-form="budget">
-    <p class="note">Semua kolom <b>opsional</b>. Kosongkan sub-kategori yang tidak perlu dibatasi (insidental). Budget tidak mengubah pencatatan — hanya jadi pembanding.</p>
-    <div class="fld"><span class="flbl">Budget total bulanan (opsional)</span><div class="amount-in"><span>Rp</span><input name="__total" inputmode="numeric" data-money value="${bud.auto?'':idn(bud.total)}" placeholder="otomatis"></div><span class="note">Kosong = otomatis jumlah semua sub-kategori di bawah.</span></div>
+  openSheet('Budget khusus '+fMonth(m), `<form class="form" data-form="budget">
+    <p class="note">Hanya untuk <b>${fMonth(m)}</b>. Angka awal diambil dari ${has?'pengaturan bulan ini':'budget berulang'} — ubah yang berbeda saja. Patokan tiap bulan diatur di menu <b>Berulang</b>.</p>
+    <div class="fld"><span class="flbl">Total ${fMonth(m)} (opsional)</span><div class="amount-in"><span>Rp</span><input name="__total" inputmode="numeric" data-money value="${bud.auto?'':idn(bud.total)}" placeholder="otomatis"></div><span class="note">Kosong = jumlah semua sub-kategori di bawah.</span></div>
     <div class="card list">${rows}</div>
-    <div class="fld"><label for="b-scope">Berlaku untuk</label><select class="inp" id="b-scope" name="scope"><option value="default" ${has?'':'selected'}>Default setiap bulan (berulang)</option><option value="month" ${has?'selected':''}>Hanya ${fMonth(m)}</option></select><span class="note">Mengubah default tidak mengubah budget bulan-bulan sebelumnya — yang lama dibekukan otomatis.</span></div>
-    <button class="btn pri block" type="submit">Simpan budget</button>
-    ${has?`<button type="button" class="btn block" data-act="budgetClear">Kembalikan ${fMonth(m)} ke budget default</button>`:''}</form>`);
+    <button class="btn pri block" type="submit">Simpan untuk ${fMonth(m)}</button>
+    ${has?`<button type="button" class="btn block" data-act="budgetClear">Kembalikan ${fMonth(m)} ke budget berulang</button>`:''}
+    <button type="button" class="btn block" data-act="go" data-v="recurring">${I('repeat','sm')} Ubah budget berulang</button></form>`);
 }
 function sheetGoal(id){
   const g=S.goals.find(x=>x.id===id);
@@ -363,7 +363,7 @@ const ACT = {
   trade: d => sheetTrade(d.id,d.side), invForm: ()=>sheetInvForm(), priceForm: d => sheetPrice(d.id),
   recv: d => sheetRecv(d.id), recvForm: ()=>sheetRecvForm(), recvPay: d => sheetRecvPay(d.id),
   bMonth: d => { const ms=ledgerMonths(); const i=ms.indexOf(UI.budgetMonth)+Number(d.d); if(ms[i]){ UI.budgetMonth=ms[i]; renderView(true); } },
-  budgetForm: ()=>sheetBudget(), budgetClear: ()=>run(()=>DB.clearBudgetMonth(UI.budgetMonth),'Kembali ke budget berulang'),
+  budgetForm: ()=>sheetBudget(), budgetMonthGo: d => { UI.budgetMonth=d.m; go('budget'); }, budgetClear: ()=>run(()=>DB.clearBudgetMonth(UI.budgetMonth),'Kembali ke budget berulang'),
   goal: d => sheetGoal(d.id), goalForm: ()=>sheetGoalForm(),
   goalDelete: d => { const g=S.goals.find(x=>x.id===d.id); confirmIn(`Hapus tujuan <b>${esc(g.name)}</b>? Uangnya tidak ke mana-mana — hanya alokasinya yang hilang.`,'Hapus',()=>run(()=>DB.deleteGoal(d.id),'Tujuan dihapus'),()=>sheetGoal(d.id)); },
   catForm: d => { if(d.back==='add'){ const f=document.querySelector('[data-form=tx]'); if(f) UI.txDraft={...formData(f)}; } sheetCatForm({kind:d.kind, parent:d.parent, back:d.back}); },
@@ -474,8 +474,11 @@ const FORMS = {
     run(()=>DB.addTxn({ date:fd.date, type:'recv_pay', amount, wallet:fd.wallet, recv:r.id, note:(amount===i.out?'Pelunasan dari ':'Cicilan dari ')+r.person }), amount===i.out?'Piutang lunas 🎉':'Pembayaran dicatat'); },
   budget: (f,fd) => { const m=UI.budgetMonth; const total=parseAmt(fd.__total); const cur=budgetFor(m);
     const cats={}; leafCats('expense',true).forEach(c=>{ cats[c.id] = ('c_'+c.id) in fd ? parseAmt(fd['c_'+c.id]) : (cur.cats[c.id]||0); });
-    if(fd.scope==='default') run(async()=>{ await DB.setBudgetDefault(total,cats); if(S.budgetOverride[m]) await DB.clearBudgetMonth(m); },'Budget disimpan');
-    else run(()=>DB.setBudgetMonth(m,total,cats),'Budget '+fMonth(m)+' disimpan'); },
+    run(()=>DB.setBudgetMonth(m,total,cats),'Budget '+fMonth(m)+' disimpan'); },
+  budgetDefault: (f,fd) => { const total=parseAmt(fd.__total);
+    const cats={}; leafCats('expense',true).forEach(c=>{ cats[c.id] = ('c_'+c.id) in fd ? parseAmt(fd['c_'+c.id]) : (c.budget||0); });
+    const curOv = S.budgetOverride[CUR_MONTH];
+    run(async()=>{ await DB.setBudgetDefault(total,cats); }, curOv ? 'Budget berulang disimpan — '+fMonth(CUR_MONTH)+' masih memakai pengaturan khusus' : 'Budget berulang disimpan'); },
   goalDep: (f,fd,sub) => { const g=S.goals.find(x=>x.id===fd.id); const a=parseAmt(fd.amount); if(!a) return formErr(f,'Masukkan jumlah.'); run(()=>DB.setGoalSaved(g.id, Math.max(0,g.saved+a*Number(sub?.value||1))),'Alokasi diperbarui'); },
   goal: (f,fd) => { const t=parseAmt(fd.amount); if(!fd.name.trim()||!t) return formErr(f,'Isi nama dan target.'); run(()=>DB.addGoal({ icon:fd.icon||'🎯', name:fd.name.trim(), target:t, saved:parseAmt(fd.saved) }),'Tujuan ditambahkan'); },
   cat: async (f,fd) => { const label=fd.label.trim(); if(!label) return formErr(f,'Isi nama kategori.');

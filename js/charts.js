@@ -85,7 +85,10 @@ function tipShow(html, x, y){
   if(left+r.width>innerWidth-8) left=x-r.width-14; if(left<8) left=8; if(top<8) top=y+16;
   TIP.el.style.left=left+'px'; TIP.el.style.top=top+'px';
 }
-function tipHide(){ if(TIP.el) TIP.el.classList.remove('on'); }
+function tipHide(){ clearTimeout(TIP.t); if(TIP.el) TIP.el.classList.remove('on'); document.querySelectorAll('.chart .xh,.chart .xd').forEach(e=>e.setAttribute('opacity',0)); }
+// Tooltip tidak boleh "nyangkut": hilang saat scroll, saat ketuk di luar grafik, atau setelah beberapa detik di layar sentuh.
+addEventListener('scroll', tipHide, {passive:true});
+document.addEventListener('pointerdown', e=>{ if(!e.target.closest('.chart')) tipHide(); }, true);
 const tipRow = (color,label,val) => `<div class="tr"><span>${color?`<i class="sw" style="background:${color}"></i>`:''}${label}</span><b class="m">${val}</b></div>`;
 
 function mountCharts(root=document){
@@ -96,7 +99,7 @@ function mountCharts(root=document){
     const move=ev=>{ const hit=ev.target.closest('.hit'); if(!hit){ tipHide(); return; }
       const i=+hit.dataset.i; const pt=ev.touches?ev.touches[0]:ev;
       if(hit.dataset.x){ const xh=svg.querySelector('.xh'), xd=svg.querySelector('.xd'); xh.setAttribute('x1',hit.dataset.x); xh.setAttribute('x2',hit.dataset.x); xh.setAttribute('opacity',1); xd.setAttribute('cx',hit.dataset.x); xd.setAttribute('cy',hit.dataset.y); xd.setAttribute('opacity',1); }
-      tipShow(c.tip(i), pt.clientX, pt.clientY); };
+      tipShow(c.tip(i), pt.clientX, pt.clientY); clearTimeout(TIP.t); if(ev.pointerType && ev.pointerType!=='mouse') TIP.t=setTimeout(tipHide, 2500); };
     svg.addEventListener('pointermove',move); svg.addEventListener('pointerdown',move);
     svg.addEventListener('pointerleave',()=>{ tipHide(); const xh=svg.querySelector('.xh'), xd=svg.querySelector('.xd'); if(xh){xh.setAttribute('opacity',0); xd.setAttribute('opacity',0);} });
   });
