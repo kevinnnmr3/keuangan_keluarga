@@ -257,6 +257,9 @@ select.inp{appearance:none;background-image:linear-gradient(45deg,transparent 50
 .w-cash{background:repeating-linear-gradient(135deg,rgba(255,255,255,.05) 0 2px,transparent 2px 9px),linear-gradient(120deg,#0f5b3f,#1d8a5f)}
 .w-bsi{background:linear-gradient(120deg,#00a19a,#36c3b8)}
 .w-bni{background:linear-gradient(120deg,#f15a23,#ff8c4b)}
+.w-seabank{background:radial-gradient(80% 110% at 100% 0%,rgba(255,255,255,.22),transparent 60%),linear-gradient(120deg,#ff5a00,#ff8a1f)}
+.w-shopeepay{background:radial-gradient(70% 90% at 100% 100%,rgba(255,255,255,.2),transparent 60%),linear-gradient(120deg,#d8392b,#ee4d2d)}
+.w-cimb{background:radial-gradient(90% 120% at 100% 0%,rgba(255,255,255,.14),transparent 55%),linear-gradient(120deg,#5c0a12,#a3132b)}
 .w-custom{background:linear-gradient(120deg,#2a2e39,#4a5163)}
 .w-ewallet{background:linear-gradient(120deg,#5b3fd8,#8c6cf7)}
 .wgrid{display:grid;grid-template-columns:1fr;gap:10px}

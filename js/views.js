@@ -295,7 +295,7 @@ function wCard(w,b,stack){
   const light = ['bri','jago'].includes(w.brand);
   const owners = w.owner==='both'?Object.keys(MEMBERS):[w.owner];
   const wm = w.brand==='bca' && /xpresi/i.test(w.name) ? `<small>Tahapan</small>Xpresi BCA` : w.brand==='cash' ? '💵 Tunai' : esc(w.short);
-  return `<button class="wcard w-${w.brand} ${light?'light':''}" data-act="wallet" data-id="${w.id}"><span class="wm">${wm}</span><span class="bal m">${rp(b)}</span><span class="meta">${esc(w.name)} · ${({bank:'Rekening bank',ewallet:'E-wallet',cash:'Tunai',custom:'Lainnya'})[w.type]||w.type}</span><span class="own">${owners.map(o=>av(o)).join('')}</span></button>`;
+  return `<button class="wcard w-${w.brand} ${light?'light':''}" data-act="wallet" data-id="${w.id}"><span class="wm">${wm}</span><span class="bal m">${rp(b)}</span><span class="meta">${esc(w.name)} · ${w.acct?'•••• '+esc(w.acct.slice(-4)):({bank:'Rekening bank',ewallet:'E-wallet',cash:'Tunai',custom:'Lainnya'})[w.type]||w.type}</span><span class="own">${owners.map(o=>av(o)).join('')}</span></button>`;
 }
 function vWallets(){
   const b=balances(null); const act=S.wallets.filter(w=>!w.archived), arch=S.wallets.filter(w=>w.archived);

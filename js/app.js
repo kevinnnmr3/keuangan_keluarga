@@ -178,21 +178,25 @@ function sheetWallet(id){
   openSheet(esc(w.name), `<div style="pointer-events:none">${wCard(w,b)}</div>
     <div class="stats"><div class="stat"><span class="k">Masuk ${fMon(CUR_MONTH)}</span><span class="v pos">${MC(i)}</span></div><div class="stat"><span class="k">Keluar ${fMon(CUR_MONTH)}</span><span class="v neg">${MC(o)}</span></div></div>
     ${w.archived?'':`<div class="btns"><button class="btn sm" data-act="add" data-type="expense" data-wallet="${id}">${I('arrout','sm')} Keluar</button><button class="btn sm" data-act="add" data-type="income" data-wallet="${id}">${I('arrin','sm')} Masuk</button><button class="btn sm" data-act="add" data-type="transfer" data-wallet="${id}">${I('swap','sm')} Transfer</button></div>`}
+    ${w.acct?`<div class="card row"><div class="mid"><div class="t2">No. ${w.type==='ewallet'?'HP / akun':'rekening'}</div><div class="t1 num" style="letter-spacing:.04em">${esc(w.acct)}</div></div><button class="btn sm" data-act="copy" data-t="${esc(w.acct)}">Salin</button></div>`:''}
     <div class="callout"><span>Saldo awal <b class="m">${rp(w.opening)}</b> per ${fDate(w.openingDate)} + ${S.txns.filter(t=>t.wallet===id||t.to===id).length} transaksi = <b class="m">${rp(b)}</b></span></div>
     <div class="card list" style="overflow:hidden">${dayGroups(list)||'<div class="empty">Belum ada transaksi.</div>'}</div>
     <div class="btns"><button class="btn" data-act="walletForm" data-id="${id}">${I('edit','sm')} Ubah</button><button class="btn" data-act="walletArchive" data-id="${id}">${I('archive','sm')} ${w.archived?'Aktifkan lagi':'Arsipkan'}</button></div>`);
 }
 function sheetWalletForm(id){
   const w=id?W(id):{name:'',short:'',type:'bank',brand:'custom',owner:'both',opening:0};
-  const brands=[['bca','BCA'],['mandiri','Mandiri'],['bri','BRI'],['bni','BNI'],['bsi','BSI'],['jago','Jago'],['gopay','GoPay'],['ewallet','E-wallet lain'],['cash','Tunai'],['custom','Lainnya']];
+  const brands=[['bca','BCA'],['mandiri','Mandiri'],['bri','BRI'],['bni','BNI'],['bsi','BSI'],['cimb','CIMB Niaga'],['jago','Jago'],['seabank','SeaBank'],['gopay','GoPay'],['shopeepay','ShopeePay'],['ewallet','E-wallet lain'],['cash','Tunai'],['custom','Lainnya']];
+  const firstTx = id ? S.txns.filter(t=>t.wallet===id||t.to===id).reduce((m,t)=>!m||t.date<m?t.date:m,null) : null;
   openSheet(id?'Ubah dompet':'Dompet baru', `<form class="form" data-form="wallet"><input type="hidden" name="id" value="${id||''}">
     <div class="fld"><label for="w-n">Nama dompet</label><input class="inp" id="w-n" name="name" value="${esc(w.name)}" placeholder="mis. BCA Tahapan, GoPay, Dompet Tunai" required maxlength="40" autofocus></div>
     <div class="frow"><div class="fld"><label for="w-s">Nama pendek</label><input class="inp" id="w-s" name="short" value="${esc(w.short)}" placeholder="BCA" maxlength="10"></div>
     <div class="fld"><label for="w-t">Jenis</label><select class="inp" id="w-t" name="type">${[['bank','Rekening bank'],['ewallet','E-wallet'],['cash','Tunai'],['custom','Lainnya']].map(o=>`<option value="${o[0]}" ${w.type===o[0]?'selected':''}>${o[1]}</option>`).join('')}</select></div></div>
     <div class="fld"><span class="flbl">Tampilan kartu</span><div class="wsel" data-radio="brand">${brands.map(b=>`<button type="button" class="${w.brand===b[0]?'on':''}" data-val="${b[0]}"><span class="wdot w-${b[0]}"></span>${b[1]}</button>`).join('')}</div><input type="hidden" name="brand" value="${w.brand}"></div>
-    <div class="fld"><label for="w-o">Pemilik</label><select class="inp" id="w-o" name="owner">${memberOpts(w.owner,true)}</select></div>
-    ${id?`<p class="note">Saldo tidak bisa diketik ulang — catat transaksi atau transfer agar riwayat tetap konsisten.</p>`:`<div class="fld"><span class="flbl">Saldo awal</span><div class="amount-in"><span>Rp</span><input name="amount" inputmode="numeric" placeholder="0" data-money></div></div>
-      <div class="fld"><label for="w-d">Saldo di atas per tanggal (awal hari)</label><input class="inp" id="w-d" type="date" name="openingDate" value="${LEDGER_START<=TODAY?LEDGER_START:TODAY}" min="${LEDGER_START}" max="${TODAY}"><span class="note">Pilih tanggal mulai pencatatan (mis. 1 ${MON[Number(CUR_MONTH.slice(5))-1]}), lalu catat transaksi sejak tanggal itu. Transaksi sebelum tanggal ini tidak bisa dicatat ke dompet ini.</span></div>`}
+    <div class="frow"><div class="fld"><label for="w-o">Pemilik</label><select class="inp" id="w-o" name="owner">${memberOpts(w.owner,true)}</select></div>
+      <div class="fld"><label for="w-a">No. rekening / HP (opsional)</label><input class="inp" id="w-a" name="acct" value="${esc(w.acct||'')}" inputmode="numeric" maxlength="40" placeholder="—"></div></div>
+    <div class="fld"><span class="flbl">Saldo awal</span><div class="amount-in"><span>Rp</span><input name="amount" inputmode="numeric" placeholder="0" data-money value="${id&&w.opening?idn(w.opening):''}"></div></div>
+    <div class="fld"><label for="w-d">Saldo di atas per tanggal (awal hari)</label><input class="inp" id="w-d" type="date" name="openingDate" value="${id?w.openingDate:(LEDGER_START<=TODAY?LEDGER_START:TODAY)}" min="${LEDGER_START}" max="${firstTx||TODAY}">
+      <span class="note">${id?`Isi saldo yang benar-benar ada di rekening pada tanggal ini. Mengubahnya akan menghitung ulang saldo sekarang dari awal${firstTx?` — tanggal tidak boleh setelah transaksi pertama (${fDate(firstTx)})`:''}.`:`Pilih tanggal mulai pencatatan (mis. 1 ${MON[Number(CUR_MONTH.slice(5))-1]}), lalu catat transaksi sejak tanggal itu.`}</span></div>
     <button class="btn pri block" type="submit">Simpan</button></form>`);
 }
 
@@ -368,6 +372,7 @@ const ACT = {
   catArchive: d => { const c=cat(d.id); run(()=>DB.archiveCategory(d.id,!c.archived), c.archived?'Kategori aktif lagi':'Kategori diarsipkan'); },
   catDelete: d => { const c=cat(d.id); confirmIn(`Hapus kategori <b>${esc(c.label)}</b>?`,'Hapus',()=>run(()=>DB.deleteCategory(d.id),'Kategori dihapus'),()=>sheetCatForm({id:d.id})); },
   voice: d => voiceStart(d.t||'sim'),
+  copy: async (d,el) => { try{ await navigator.clipboard.writeText(d.t); toast('Disalin'); }catch(e){ const r=document.createRange(); const n=el.parentElement.querySelector('.num'); if(n){ r.selectNodeContents(n); const s=getSelection(); s.removeAllRanges(); s.addRange(r); } toast('Tekan lama untuk menyalin', true); } },
   voiceAdd: () => { closeSheet(); UI.inboxTab='queue'; go('inbox'); voiceStart('sim'); },
   recurringForm: ()=>sheetRecurringForm(),
   segPick: (d,el) => { const seg=el.parentElement; seg.querySelectorAll('button').forEach(b=>b.classList.toggle('on',b===el)); el.closest('form').querySelector(`[name=${seg.dataset.radioSeg}]`).value=d.k; },
@@ -441,10 +446,11 @@ const FORMS = {
     run(()=>DB.addTxn(o), `${TYPE_LABEL[o.type]} ${rp(o.amount)} tercatat`);
   },
   wallet: (f,fd) => { const name=fd.name.trim(); if(!name) return formErr(f,'Isi nama dompet.');
-    const w={ name, short:(fd.short||name).trim().slice(0,10), type:fd.type, brand:fd.brand, owner:fd.owner };
-    if(fd.id) return run(()=>DB.updateWallet(fd.id,w),'Dompet diperbarui');
+    const w={ name, short:(fd.short||name).trim().slice(0,10), type:fd.type, brand:fd.brand, owner:fd.owner, acct:(fd.acct||'').replace(/\s+/g,''), opening:parseAmt(fd.amount), openingDate:fd.openingDate };
     if(!fd.openingDate || fd.openingDate<LEDGER_START || fd.openingDate>TODAY) return formErr(f,'Tanggal saldo awal tidak valid.');
-    run(()=>DB.addWallet({ ...w, opening:parseAmt(fd.amount), openingDate:fd.openingDate }),'Dompet ditambahkan'); },
+    if(fd.id){ const firstTx=S.txns.filter(t=>t.wallet===fd.id||t.to===fd.id).reduce((m,t)=>!m||t.date<m?t.date:m,null); if(firstTx && fd.openingDate>firstTx) return formErr(f,'Tanggal saldo awal tidak boleh setelah transaksi pertama dompet ini ('+fDate(firstTx)+').');
+      return run(()=>DB.updateWallet(fd.id,w),'Dompet diperbarui'); }
+    run(()=>DB.addWallet(w),'Dompet ditambahkan'); },
   trade: (f,fd) => { const inv=INV(fd.id), h=holding(inv), dep=inv.type==='deposit';
     let qty, price, fee=parseAmt(fd.fee);
     if(dep){ const amt=parseAmt(fd.amount); if(!amt) return formErr(f,'Masukkan jumlah.'); if(fd.side==='sell' && amt>h.cost+0.5) return formErr(f,'Melebihi pokok deposito.');

@@ -52,7 +52,7 @@ function findAmount(text){
   return { value:0, span:'', conf:'low' };
 }
 
-const WALLET_ALIASES = { bca:['bca','m-banking bca','mybca'], mandiri:['mandiri','livin'], bri:['bri','brimo','simpedes'], jago:['jago'], gopay:['gopay','go pay'], tunai:['cash','tunai','uang tunai','kes'] };
+const WALLET_ALIASES = { bca:['bca','m-banking bca','mybca'], mandiri:['mandiri','livin'], bri:['bri','brimo','simpedes'], jago:['jago'], gopay:['gopay','go pay'], seabank:['seabank','sea bank'], shopeepay:['shopeepay','shopee pay','spay'], cimb:['cimb','cimb niaga','octo','payroll'], bsi:['bsi','byond'], bni:['bni','wondr'], tunai:['cash','tunai','uang tunai','kes'] };
 // Urutan penting: yang spesifik dulu, yang umum (mis. 'makan') belakangan. Kunci = code sub-kategori.
 const CAT_KEYWORDS = {
   bensin:['bensin','pertalite','pertamax','solar','isi bensin','spbu'],
