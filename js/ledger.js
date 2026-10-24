@@ -56,6 +56,15 @@ function ledgerMonths(){ const out=[]; let m=monthOf(LEDGER_START); while(m<=CUR
 /* ---------- lookup ---------- */
 const W = id => S.wallets.find(w=>w.id===id) || {id, name:'(dompet dihapus)', short:'?', brand:'custom', type:'custom'};
 const cat = (id,type) => (type==='income'?S.incCats:S.expCats).find(c=>c.id===id) || S.expCats.find(c=>c.id===id) || S.incCats.find(c=>c.id===id) || {id, label:'Lainnya', icon:'✨'};
+/* kategori bertingkat: grup (parent null) → sub. Daun = kategori tanpa anak (dipakai transaksi). */
+const catList = kind => kind==='income' ? S.incCats : S.expCats;
+const bySort = (a,b) => (a.sort??0)-(b.sort??0) || a.label.localeCompare(b.label);
+const kidsOf = (id, kind, all) => catList(kind).filter(c=>c.parent===id && (all || !c.archived)).sort(bySort);
+const groupCats = (kind, all) => catList(kind).filter(c=>!c.parent && (all || !c.archived)).sort(bySort);
+const isLeaf = c => !catList(c.kind||'expense').some(x=>x.parent===c.id && !x.archived);
+function leafCats(kind, all){ const out=[]; groupCats(kind, all).forEach(g=>{ const k=kidsOf(g.id,kind,all); if(k.length) out.push(...k); else if(all || !catList(kind).some(x=>x.parent===g.id)) out.push(g); }); return out; }
+function groupOf(id){ const c=cat(id); if(!c || !c.parent) return c; return S.expCats.find(x=>x.id===c.parent) || S.incCats.find(x=>x.id===c.parent) || c; }
+function catFull(id,type){ const c=cat(id,type); const g=groupOf(id); return g && g.id!==c.id ? c.label+' · '+g.label : c.label; }
 const INV = id => S.investments.find(i=>i.id===id);
 const RECV = id => S.receivables.find(r=>r.id===id);
 
@@ -70,22 +79,27 @@ function walletTotal(upto){ const b=balances(upto); return S.wallets.filter(w=>!
 /* ---------- pemasukan & pengeluaran ---------- */
 function inRange(t,m,uptoDay){ if(monthOf(t.date)!==m) return false; return !uptoDay || Number(t.date.slice(8))<=uptoDay; }
 function flows(m,uptoDay){
-  let income=0, expense=0; const byCat={}, byInc={}, byWallet={}; let fromAsset=0;
+  let income=0, expense=0; const byCat={}, byInc={}, byWallet={}, byGroup={}; let fromAsset=0;
   S.txns.forEach(t=>{ if(!inRange(t,m,uptoDay)) return;
     if(t.type==='income'){ income+=t.amount; byInc[t.cat]=(byInc[t.cat]||0)+t.amount; }
-    if(t.type==='expense'){ expense+=t.amount; byCat[t.cat]=(byCat[t.cat]||0)+t.amount; byWallet[t.wallet]=(byWallet[t.wallet]||0)+t.amount; if(t.fundedFrom) fromAsset+=t.amount; }
+    if(t.type==='expense'){ expense+=t.amount; byCat[t.cat]=(byCat[t.cat]||0)+t.amount; { const g=groupOf(t.cat); const gid=g?g.id:'_'; byGroup[gid]=(byGroup[gid]||0)+t.amount; } byWallet[t.wallet]=(byWallet[t.wallet]||0)+t.amount; if(t.fundedFrom) fromAsset+=t.amount; }
   });
-  return { income, expense, net:income-expense, byCat, byInc, byWallet, fromAsset };
+  return { income, expense, net:income-expense, byCat, byInc, byWallet, byGroup, fromAsset };
 }
 const isPartial = m => m===CUR_MONTH;
 const monthLabel = m => isPartial(m) ? fMon(m)+' (1–'+TODAY_DAY+')' : fMon(m);
 
 /* ---------- budget ---------- */
+/* Budget bulan m: override bulan itu (kalau pernah disimpan/dibekukan) atau default tiap sub-kategori.
+   Default 0 = tanpa budget (opsional). Total kosong = jumlah semua sub. */
 function budgetFor(m){
-  const o = S.budgetOverride[m] || {};
-  const cats = {}; S.expCats.forEach(c=> cats[c.id] = o[c.id]!==undefined ? o[c.id] : (c.budget||0));
-  return { total: o.__total!==undefined ? o.__total : S.budgetTotal, cats };
+  const o = S.budgetOverride[m];
+  const cats = {}; leafCats('expense', true).forEach(c=> cats[c.id] = o ? (o[c.id]||0) : (c.budget||0));
+  const sum = Object.values(cats).reduce((a,b)=>a+b,0);
+  let total = o ? (o.__total||0) : (S.budgetTotal||0); const auto = !total; if(auto) total = sum;
+  return { total, cats, sum, auto, overridden:!!o, any: total>0 };
 }
+function groupBudget(g, bud){ const k=kidsOf(g.id,'expense',true); return k.length ? k.reduce((s,c)=>s+(bud.cats[c.id]||0),0) : (bud.cats[g.id]||0); }
 
 /* ---------- investasi (metode biaya rata-rata) ---------- */
 function priceAt(inv, m){

@@ -22,7 +22,7 @@ function yAxis(w,padL,top,plotH,min,max,ticks=4){
 /* Kolom berkelompok (mis. pemasukan vs pengeluaran per bulan) */
 function drawGroupedBars(el, cfg){
   const w=Math.max(260,el.clientWidth), h=cfg.height||220, padL=44, top=12, bottom=26, plotH=h-top-bottom, plotW=w-padL;
-  const all=cfg.series.flatMap(s=>s.values); const max=niceMax(Math.max(...all,0)), min=niceMin(Math.min(...all,0));
+  const all=cfg.series.flatMap(s=>s.values).concat((cfg.refs||[]).filter(v=>v>0)); const max=niceMax(Math.max(...all,0)), min=niceMin(Math.min(...all,0));
   const n=cfg.labels.length, band=plotW/n, k=cfg.series.length;
   const bw=Math.min(24,(band*0.62-(k-1)*2)/k), groupW=bw*k+(k-1)*2;
   const y0=top+plotH-(0-min)/(max-min)*plotH;

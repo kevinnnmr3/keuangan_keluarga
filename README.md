@@ -11,6 +11,8 @@ Website pencatatan keuangan keluarga: dompet, investasi, piutang, budget, tujuan
 | Keamanan data | Row Level Security — hanya anggota `household_members` yang bisa baca/tulis |
 | Pendaftaran | Hanya email yang sudah diizinkan (trigger `enforce_signup_allowlist`) |
 
+Kategori bertingkat: **grup → sub-kategori** (seperti "pos" di versi Apps Script). Budget default per sub-kategori **opsional**; bisa ditimpa khusus satu bulan, dan bulan lalu dibekukan otomatis saat default diubah.
+
 Prinsip akuntansi: **saldo tidak disimpan**. Saldo dompet = saldo awal + semua transaksi.
 Transfer, beli/jual investasi, dan piutang tidak dihitung sebagai pemasukan/pengeluaran.
 

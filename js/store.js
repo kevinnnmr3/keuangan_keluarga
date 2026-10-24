@@ -54,8 +54,8 @@ async function loadAll(){
     user: me.id, email:user.email, household,
     wallets: wal.map(w=>({ id:w.id, name:w.name, short:w.short, type:w.type, brand:w.brand, owner:w.owner_member_id||'both',
       opening:num(w.opening_balance), openingDate:w.opening_date, archived:w.archived })),
-    expCats: cats.filter(c=>c.kind==='expense' && !c.archived).map(c=>({ id:c.id, code:c.code, label:c.label, icon:c.icon, tint:c.tint, budget:num(c.budget), custom:!c.code })),
-    incCats: cats.filter(c=>c.kind==='income' && !c.archived).map(c=>({ id:c.id, code:c.code, label:c.label, icon:c.icon, tint:c.tint, custom:!c.code })),
+    expCats: cats.filter(c=>c.kind==='expense').map(c=>({ id:c.id, kind:'expense', code:c.code, label:c.label, icon:c.icon, tint:c.tint, budget:num(c.budget)||0, parent:c.parent_id||null, archived:c.archived, sort:c.sort, custom:!c.code })),
+    incCats: cats.filter(c=>c.kind==='income').map(c=>({ id:c.id, kind:'income', code:c.code, label:c.label, icon:c.icon, tint:c.tint, budget:0, parent:c.parent_id||null, archived:c.archived, sort:c.sort, custom:!c.code })),
     investments: invs.filter(i=>!i.archived).map(i=>({ id:i.id, type:i.type, name:i.name, symbol:i.symbol, unit:i.unit, icon:i.icon, sub:i.note||'',
       currentPrice:num(i.current_price), priceUpdated:i.price_updated_at,
       prices: prices.filter(p=>p.investment_id===i.id).map(p=>({month:p.month, price:num(p.price)})),
@@ -97,11 +97,17 @@ const DB = {
   },
   createReceivable: async p => must(await sb.rpc('create_receivable', { p_person:p.person, p_note:p.note, p_amount:p.amount, p_date:p.date, p_due:p.due, p_wallet:p.wallet })),
   setBudgetDefault: async (total, cats) => {
+    // Bekukan bulan-bulan lalu yang masih memakai default, supaya riwayat budget tidak ikut berubah.
+    const past = ledgerMonths().filter(m=>m<CUR_MONTH && !S.budgetOverride[m]);
+    const rows = [];
+    past.forEach(m=>{ const b=budgetFor(m); if(!b.total && !Object.values(b.cats).some(v=>v>0)) return;
+      rows.push({ month:m, category_id:null, amount:b.auto?0:b.total }); Object.entries(b.cats).forEach(([id,amt])=>{ if(amt>0) rows.push({ month:m, category_id:id, amount:amt }); }); });
+    if(rows.length) must(await sb.from('budget_overrides').insert(rows));
     must(await sb.from('households').update({ budget_total:total }).eq('id',S.household.id));
     await Promise.all(Object.entries(cats).map(async ([id,amt])=> must(await sb.from('categories').update({ budget:amt }).eq('id',id))));
   },
   setBudgetMonth: async (month, total, cats) => {
-    const rows=[{ month, category_id:null, amount:total }, ...Object.entries(cats).map(([id,amt])=>({ month, category_id:id, amount:amt }))];
+    const rows=[{ month, category_id:null, amount:total||0 }, ...Object.entries(cats).filter(([,amt])=>amt>0).map(([id,amt])=>({ month, category_id:id, amount:amt }))];
     must(await sb.from('budget_overrides').delete().eq('month',month));
     must(await sb.from('budget_overrides').insert(rows));
   },
@@ -109,7 +115,10 @@ const DB = {
   addGoal: async g => must(await sb.from('goals').insert({ icon:g.icon, name:g.name, target:g.target, saved:g.saved||0, sort:S.goals.length })),
   setGoalSaved: async (id,saved) => must(await sb.from('goals').update({ saved }).eq('id',id)),
   deleteGoal: async id => must(await sb.from('goals').delete().eq('id',id)),
-  addCategory: async c => must(await sb.from('categories').insert({ kind:c.kind, label:c.label, icon:c.icon, budget:c.budget||0, tint:'#EEF0F3', sort:99 })),
+  addCategory: async c => must(await sb.from('categories').insert({ kind:c.kind, label:c.label, icon:c.icon, budget:c.budget||0, tint:c.tint||'#EEF0F3', parent_id:c.parent||null, sort:c.sort??99 }).select('id').single()),
+  updateCategory: async (id,c) => must(await sb.from('categories').update({ label:c.label, icon:c.icon, budget:c.budget||0, parent_id:c.parent||null, ...(c.tint?{tint:c.tint}:{}) }).eq('id',id)),
+  archiveCategory: async (id,flag) => must(await sb.from('categories').update({ archived:flag }).eq('id',id)),
+  deleteCategory: async id => must(await sb.from('categories').delete().eq('id',id)),
   toggleRecurring: async (id,active) => must(await sb.from('recurring_rules').update({ active }).eq('id',id)),
   addRecurring: async r => must(await sb.from('recurring_rules').insert({ name:r.name, type:r.type, amount:r.amount, wallet_id:r.wallet, to_wallet_id:r.type==='transfer'?r.to:null,
     category_id:r.type==='transfer'?null:r.cat, day:r.day, owner_member_id:r.owner })),

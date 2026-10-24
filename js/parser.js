@@ -53,17 +53,33 @@ function findAmount(text){
 }
 
 const WALLET_ALIASES = { bca:['bca','m-banking bca','mybca'], mandiri:['mandiri','livin'], bri:['bri','brimo','simpedes'], jago:['jago'], gopay:['gopay','go pay'], tunai:['cash','tunai','uang tunai','kes'] };
+// Urutan penting: yang spesifik dulu, yang umum (mis. 'makan') belakangan. Kunci = code sub-kategori.
 const CAT_KEYWORDS = {
-  dapur:['superindo','indomaret','alfamart','pasar','sayur','beras','galon','gas elpiji','minyak goreng','telur','yogya','borma','dapur'],
-  makan:['makan','kopi','ngopi','bakso','nasi','gofood','grabfood','jajan','sarapan','martabak','warteg','padang','minum','seblak','mie'],
-  transport:['bensin','pertalite','pertamax','parkir','tol','ojol','ojek','servis','cuci mobil','cuci motor','ban'],
-  tagihan:['listrik','token','pln','internet','indihome','wifi','pdam','pulsa','paket data','bpjs'],
-  anak:['susu','popok','pampers','diaper','mainan','daycare','anak'],
-  kesehatan:['obat','apotek','dokter','klinik','vitamin','rumah sakit','vaksin'],
-  hiburan:['nonton','bioskop','netflix','spotify','game','liburan','jalan-jalan'],
-  pribadi:['shopee','tokopedia','baju','sepatu','skincare','potong rambut','kaos'],
-  sosial:['kondangan','sumbangan','zakat','sedekah','infaq','orang tua','ortu','arisan','hadiah','kado','ulang tahun'],
-  rumah:['sewa','kontrakan','kos','perabot','renovasi'],
+  bensin:['bensin','pertalite','pertamax','solar','isi bensin','spbu'],
+  servis:['servis','service','bengkel','ganti oli','oli','ban','cuci mobil','cuci motor','aki'],
+  listrik:['listrik','token','pln'],
+  internet:['internet','indihome','wifi','biznet','first media','myrepublic'],
+  air:['pdam','tagihan air'],
+  gas:['gas','elpiji','lpg'],
+  pulsa:['pulsa','paket data','kuota'],
+  rumah:['sewa','kontrakan','kos','kosan','kpr','renovasi'],
+  cicilan:['cicilan','angsuran','kredit','paylater','utang','hutang','pinjol'],
+  suplemen:['suplemen','vitamin'],
+  anak:['susu','popok','pampers','diaper','mainan','daycare','sekolah','anak','mamypoko','sgm'],
+  obat:['obat','apotek','apotik'],
+  kesehatan:['dokter','klinik','rumah sakit','bpjs','vaksin','puskesmas','periksa'],
+  skincare:['skincare','salon','facial','perawatan','creambath','serum'],
+  baju:['baju','celana','sepatu','kaos','kemeja','jilbab','kerudung','sandal'],
+  pribadi:['shopee','tokopedia','lazada','potong rambut','cukur','sabun mandi','perlengkapan'],
+  ortu:['orang tua','ortu','mamah','mama','bapak','ibu','mertua'],
+  keluarga:['kondangan','sumbangan','zakat','sedekah','infaq','arisan','hadiah','kado','ulang tahun','adik','kakak','ponakan','keponakan'],
+  hiburan:['nonton','bioskop','netflix','spotify','youtube premium','game','liburan','jalan-jalan','wisata'],
+  darurat:['darurat'],
+  groceries:['indomaret','alfamart','alfamidi','sabun','deterjen','tisu','sampo','pasta gigi'],
+  dapur:['superindo','pasar','sayur','beras','galon','minyak goreng','telur','yogya','borma','hypermart','dapur','daging','ayam potong','bumbu'],
+  jajan:['jajan','cemilan','camilan','snack','gorengan','es krim','boba'],
+  transport:['parkir','tol','ojol','ojek','gojek','grab','kereta','krl','busway','transjakarta','bus','angkot','tiket'],
+  makan:['makan','kopi','ngopi','bakso','nasi','gofood','grabfood','shopeefood','sarapan','martabak','warteg','padang','minum','seblak','mie','sate','soto','restoran','cafe'],
 };
 const INC_KEYWORDS = { gaji:['gaji','gajian','thr','bonus'], freelance:['freelance','proyek','project','klien','konsultasi'], usaha:['jualan','usaha','omzet','dagangan'], hasilinv:['bunga','dividen','kupon'] };
 const INCOME_HINT = ['gaji','gajian','terima','nerima','dapet','dapat','masuk','transferan','bonus','thr','freelance','cashback','bunga','dividen','jualan','omzet'];
@@ -92,8 +108,12 @@ function parseUtterance(text, owner){
   else if(INCOME_HINT.some(k=>has(s,k))) type='income';
   // kategori
   let catId=null, catConf='low', kw=null;
-  if(type==='expense'){ for(const [c,arr] of Object.entries(CAT_KEYWORDS)){ const k=arr.find(a=>has(s,a)); if(k){ catId=c; kw=k; catConf='high'; break; } } if(!catId && has(s,'belanja')){ catId='dapur'; catConf='low'; } if(!catId) catId='lainnya'; }
-  if(type==='income'){ for(const [c,arr] of Object.entries(INC_KEYWORDS)){ const k=arr.find(a=>has(s,a)); if(k){ catId=c; kw=k; catConf='high'; break; } } if(!catId) catId='lainmasuk'; }
+  // 1) nama sub-kategori/kategori milik sendiri yang disebut langsung (mis. 'parkir', 'pendidikan')
+  let catLeafId=null;
+  if(type!=='transfer'){ const leaves=leafCats(type).filter(c=>c.label.length>=4).sort((a,b)=>b.label.length-a.label.length);
+    const hit=leaves.find(c=>has(s,c.label.toLowerCase())); if(hit){ catLeafId=hit.id; catConf='high'; } }
+  if(!catLeafId && type==='expense'){ for(const [c,arr] of Object.entries(CAT_KEYWORDS)){ const k=arr.find(a=>has(s,a)); if(k){ catId=c; kw=k; catConf='high'; break; } } if(!catId && has(s,'belanja')){ catId='dapur'; catConf='low'; } if(!catId) catId='lainnya'; }
+  if(!catLeafId && type==='income'){ for(const [c,arr] of Object.entries(INC_KEYWORDS)){ const k=arr.find(a=>has(s,a)); if(k){ catId=c; kw=k; catConf='high'; break; } } if(!catId) catId='lainmasuk'; }
   // dompet
   let wallet=null, to=null, wConf='low';
   const firstW = (S.wallets.find(w=>!w.archived)||{}).id || null;
@@ -123,7 +143,7 @@ function parseUtterance(text, owner){
   note = note.charAt(0).toUpperCase()+note.slice(1);
   if(type==='transfer') note = /tarik tunai/.test(s) ? 'Tarik tunai' : /top ?up|isi saldo/.test(s) ? 'Top up '+W(to).short : 'Transfer ke '+W(to).short;
   if(note.length>48) note = note.slice(0,46).trim()+'…';
-  if(type!=='transfer'){ const list = type==='income'?S.incCats:S.expCats; const c = list.find(x=>x.code===catId) || list.find(x=>x.code===(type==='income'?'lainmasuk':'lainnya')) || list[0]; catId = c ? c.id : null; } else catId=null;
+  if(catLeafId){ catId=catLeafId; } else if(type!=='transfer'){ const leaves=leafCats(type); const c = leaves.find(x=>x.code===catId) || leaves.find(x=>x.code===(type==='income'?'lainmasuk':'lainnya')) || leaves[0]; if(c && c.code!==catId) catConf='low'; catId = c ? c.id : null; } else catId=null;
   if(!note) note = catId ? cat(catId,type).label : 'Transfer';
   return { type, amount:amt.value, amtConf:amt.conf, cat:catId, catConf, wallet, to, wConf, date, dConf, note, owner };
 }

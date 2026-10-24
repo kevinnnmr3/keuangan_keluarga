@@ -137,15 +137,15 @@ function sheetAdd(pre={}){
   if(!['expense','income','transfer'].includes(d.type)) d.type='expense';
   if(!d.wallet || !S.wallets.find(w=>w.id===d.wallet)) d.wallet=defWallet();
   if(d.type==='transfer' && (!d.to || d.to===d.wallet)) d.to = (S.wallets.find(w=>!w.archived && w.id!==d.wallet)||{}).id||'';
-  const cats = d.type==='income'?S.incCats:S.expCats;
-  if(d.type!=='transfer' && !cats.find(c=>c.id===d.cat)) d.cat = cats[0]?.id;
+  const leaves = leafCats(d.type==='income'?'income':'expense');
+  if(d.type!=='transfer' && !leaves.find(c=>c.id===d.cat)){ const last=S.txns.slice().reverse().find(x=>x.type===d.type && x.owner===S.user && leaves.some(c=>c.id===x.cat)); d.cat = last ? last.cat : ''; }
   const sells = S.txns.filter(x=>x.type==='inv_sell').slice(-6);
   const body = `<form class="form" data-form="tx">
     <input type="hidden" name="id" value="${t?t.id:''}"><input type="hidden" name="draft" value="${pre.draft||''}"><input type="hidden" name="type" value="${d.type}">
     ${t?'':`<div class="seg full">${[['expense','Pengeluaran'],['income','Pemasukan'],['transfer','Transfer']].map(o=>`<button type="button" class="${d.type===o[0]?'on':''}" data-act="txType" data-k="${o[0]}">${o[1]}</button>`).join('')}</div>`}
     ${amountField(d.amount, !pre.draft)}
     ${d.type==='transfer' ? `<div class="fld"><span class="flbl">Dari dompet</span>${walletChips('wallet',d.wallet)}</div><div class="fld"><span class="flbl">Ke dompet</span>${walletChips('to',d.to)}</div><p class="note">Transfer antar dompet tidak dihitung sebagai pemasukan atau pengeluaran.</p>`
-      : `<div class="fld"><span class="flbl">${d.type==='income'?'Sumber':'Kategori'}</span><div class="catgrid" data-radio="cat">${cats.map(c=>`<button type="button" class="${d.cat===c.id?'on':''}" data-val="${c.id}"><span class="e">${c.icon}</span>${esc(c.label)}</button>`).join('')}</div><input type="hidden" name="cat" value="${d.cat||''}"></div>
+      : `<div class="fld"><span class="flbl">${d.type==='income'?'Sumber':'Kategori'}</span>${catPicker(d.type, d.cat)}<input type="hidden" name="cat" value="${d.cat||''}"></div>
          <div class="fld"><span class="flbl">${d.type==='income'?'Masuk ke':'Dibayar dari'}</span>${walletChips('wallet',d.wallet)}</div>`}
     <div class="frow"><div class="fld"><label for="tx-d">Tanggal</label><input class="inp" id="tx-d" type="date" name="date" value="${d.date}" min="${LEDGER_START}" max="${TODAY}"></div>
       <div class="fld"><label for="tx-o">Dicatat untuk</label><select class="inp" id="tx-o" name="owner">${memberOpts(d.owner||S.user)}</select></div></div>
@@ -153,7 +153,7 @@ function sheetAdd(pre={}){
     ${d.type==='expense'?`<div class="fld"><label for="tx-f">Didanai dari penjualan aset? (opsional)</label><select class="inp" id="tx-f" name="fundedFrom"><option value="">Tidak — dari kas biasa</option>${sells.map(s=>`<option value="${s.id}" ${d.fundedFrom===s.id?'selected':''}>${esc(s.note)} · ${fDate(s.date)}</option>`).join('')}</select><span class="note">Hanya penanda analisis. Penjualan asetnya sendiri tidak dihitung sebagai pengeluaran atau pemasukan.</span></div>`:''}
     <button class="btn pri block" type="submit">${pre.draft?'Simpan & setujui draft':t?'Simpan perubahan':'Simpan transaksi'}</button>
     ${t?`<button type="button" class="btn danger block" data-act="txDelete" data-id="${t.id}">${I('trash','sm')} Hapus transaksi</button>`:''}
-    ${t||pre.draft?'':`<button type="button" class="btn block" data-act="go" data-v="inbox">${I('mic','sm')} Catat lewat suara</button>`}
+    ${t||pre.draft?'':`<button type="button" class="btn block" data-act="voiceAdd">${I('mic','sm')} Catat lewat suara</button>`}
   </form>`;
   openSheet(pre.draft?'Ubah draft suara':t?'Ubah transaksi':'Catat transaksi', body);
 }
@@ -260,13 +260,17 @@ function sheetRecvPay(id){
 
 /* ---------- sheet: budget, tujuan, kategori, berulang, drilldown ---------- */
 function sheetBudget(){
-  const m=UI.budgetMonth, bud=budgetFor(m), has=!!S.budgetOverride[m];
+  const m=UI.budgetMonth, bud=budgetFor(m), has=bud.overridden;
+  const leafIn = (c,label) => `<div class="row" style="padding:8px 14px 8px ${label?'16px':'30px'}"><div class="mid"><div class="t1" style="font-size:14px">${c.icon} ${esc(c.label)}</div></div><input class="inp" style="width:140px;height:40px;text-align:right" name="c_${c.id}" inputmode="numeric" data-money placeholder="—" value="${bud.cats[c.id]?idn(bud.cats[c.id]):''}" aria-label="Budget ${esc(c.label)}"></div>`;
+  const rows = groupCats('expense').map(g=>{ const kids=kidsOf(g.id,'expense'); if(!kids.length) return leafIn(g,true);
+    return `<div class="row" style="padding:10px 14px 4px;border-top:1px solid var(--line)"><div class="mid"><div class="t1" style="font-size:12.5px;color:var(--ink3);font-weight:700">${g.icon} ${esc(g.label).toUpperCase()}</div></div></div>${kids.map(c=>leafIn(c)).join('')}`; }).join('');
   openSheet('Budget '+fMonth(m), `<form class="form" data-form="budget">
-    <div class="fld"><span class="flbl">Budget total bulanan</span><div class="amount-in"><span>Rp</span><input name="__total" inputmode="numeric" data-money value="${idn(bud.total)}"></div></div>
-    <div class="card list">${S.expCats.map(c=>`<div class="row" style="padding:10px 14px">${tile(c,'sm')}<div class="mid"><div class="t1" style="font-size:14.5px">${esc(c.label)}</div></div><input class="inp" style="width:150px;height:42px;text-align:right" name="c_${c.id}" inputmode="numeric" data-money value="${idn(bud.cats[c.id]||0)}" aria-label="Budget ${esc(c.label)}"></div>`).join('')}</div>
-    <div class="fld"><label for="b-scope">Berlaku untuk</label><select class="inp" id="b-scope" name="scope"><option value="default">Setiap bulan (budget berulang)</option><option value="month" ${has?'selected':''}>Hanya ${fMonth(m)}</option></select></div>
+    <p class="note">Semua kolom <b>opsional</b>. Kosongkan sub-kategori yang tidak perlu dibatasi (insidental). Budget tidak mengubah pencatatan — hanya jadi pembanding.</p>
+    <div class="fld"><span class="flbl">Budget total bulanan (opsional)</span><div class="amount-in"><span>Rp</span><input name="__total" inputmode="numeric" data-money value="${bud.auto?'':idn(bud.total)}" placeholder="otomatis"></div><span class="note">Kosong = otomatis jumlah semua sub-kategori di bawah.</span></div>
+    <div class="card list">${rows}</div>
+    <div class="fld"><label for="b-scope">Berlaku untuk</label><select class="inp" id="b-scope" name="scope"><option value="default" ${has?'':'selected'}>Default setiap bulan (berulang)</option><option value="month" ${has?'selected':''}>Hanya ${fMonth(m)}</option></select><span class="note">Mengubah default tidak mengubah budget bulan-bulan sebelumnya — yang lama dibekukan otomatis.</span></div>
     <button class="btn pri block" type="submit">Simpan budget</button>
-    ${has?`<button type="button" class="btn block" data-act="budgetClear">Kembalikan ${fMonth(m)} ke budget berulang</button>`:''}</form>`);
+    ${has?`<button type="button" class="btn block" data-act="budgetClear">Kembalikan ${fMonth(m)} ke budget default</button>`:''}</form>`);
 }
 function sheetGoal(id){
   const g=S.goals.find(x=>x.id===id);
@@ -281,29 +285,52 @@ function sheetGoalForm(){
     <div class="fld"><label for="g-s">Sudah terkumpul</label><input class="inp" id="g-s" name="saved" inputmode="numeric" data-money placeholder="0"></div>
     <button class="btn pri block" type="submit">Simpan</button></form>`);
 }
-function sheetCatForm(){
-  openSheet('Kategori baru', `<form class="form" data-form="cat"><div class="seg full" data-radio-seg="ctype"><button type="button" class="on" data-act="segPick" data-k="expense">Pengeluaran</button><button type="button" data-act="segPick" data-k="income">Pemasukan</button></div><input type="hidden" name="ctype" value="expense">
-    <div class="frow" style="grid-template-columns:90px 1fr"><div class="fld"><label for="c-i">Ikon</label><input class="inp" id="c-i" name="icon" value="🏷️" maxlength="4" style="text-align:center;font-size:22px"></div><div class="fld"><label for="c-n">Nama</label><input class="inp" id="c-n" name="label" required maxlength="24" autofocus></div></div>
-    <div class="fld"><label for="c-b">Budget bulanan (pengeluaran)</label><input class="inp" id="c-b" name="budget" inputmode="numeric" data-money placeholder="0"></div>
-    <button class="btn pri block" type="submit">Simpan</button></form>`);
+function catPicker(type, sel){
+  const k = type==='income' ? 'income' : 'expense';
+  const recent=[]; S.txns.slice().reverse().forEach(t=>{ if(t.type===k && t.cat && !recent.includes(t.cat) && recent.length<6){ const c=cat(t.cat); if(c && !c.archived && isLeaf(c)) recent.push(t.cat); } });
+  const chip = (c, lbl) => `<button type="button" class="${sel===c.id?'on':''}" data-val="${c.id}">${lbl}</button>`;
+  return `<div class="catpick" data-radio="cat">
+    ${recent.length?`<div class="cp-g"><div class="cp-h">Terakhir dipakai</div><div class="cp-c">${recent.map(id=>{ const c=cat(id); return chip(c, c.icon+' '+esc(c.label)); }).join('')}</div></div>`:''}
+    ${groupCats(k).map(g=>{ const kids=kidsOf(g.id,k); return `<div class="cp-g"><div class="cp-h">${g.icon} ${esc(g.label)}</div><div class="cp-c">${(kids.length?kids:[g]).map(c=>chip(c, kids.length?c.icon+' '+esc(c.label):esc(g.label))).join('')}</div></div>`; }).join('')}
+    <button type="button" class="cp-add" data-act="catForm" data-kind="${k}" data-back="add">${I('plus','xs')} Kategori / sub baru</button></div>`;
+}
+function sheetCatForm(o={}){
+  const c = o.id ? cat(o.id) : null;
+  const kind = c ? (c.kind||'expense') : (o.kind||'expense');
+  const parent = c ? (c.parent||'') : (o.parent||'');
+  const hasKids = !!(c && catList(kind).some(x=>x.parent===c.id));
+  const groups = groupCats(kind).filter(g=>!c || g.id!==c.id);
+  const used = c ? S.txns.filter(t=>t.cat===c.id).length + S.recurring.filter(r=>r.cat===c.id).length : 0;
+  const pg = parent ? cat(parent) : null;
+  openSheet(c ? 'Ubah kategori' : parent ? 'Sub-kategori baru' : 'Kategori baru', `<form class="form" data-form="cat"><input type="hidden" name="id" value="${c?c.id:''}"><input type="hidden" name="back" value="${o.back||''}"><input type="hidden" name="ctype" value="${kind}">
+    ${!c && !parent && !o.back?`<div class="seg full">${[['expense','Pengeluaran'],['income','Pemasukan']].map(x=>`<button type="button" class="${kind===x[0]?'on':''}" data-act="catFormKind" data-k="${x[0]}">${x[1]}</button>`).join('')}</div>`:''}
+    <div class="fld"><label for="c-p">Letak</label><select class="inp" id="c-p" name="parent" ${hasKids?'disabled':''}><option value="">Kategori utama (grup sendiri)</option>${groups.map(g=>`<option value="${g.id}" ${parent===g.id?'selected':''}>Sub dari: ${g.icon} ${esc(g.label)}</option>`).join('')}</select>${hasKids?'<span class="note">Kategori ini punya sub-kategori, jadi tetap sebagai kategori utama.</span>':''}</div>
+    <div class="frow" style="grid-template-columns:90px 1fr"><div class="fld"><label for="c-i">Ikon</label><input class="inp" id="c-i" name="icon" value="${esc(c?c.icon:(pg?pg.icon:'🏷️'))}" maxlength="4" style="text-align:center;font-size:22px"></div><div class="fld"><label for="c-n">Nama</label><input class="inp" id="c-n" name="label" value="${esc(c?c.label:'')}" required maxlength="32" autofocus placeholder="${parent?'mis. Bensin, Listrik':'mis. Pendidikan'}"></div></div>
+    ${kind==='expense' && !hasKids?`<div class="fld"><label for="c-b">Budget default per bulan (opsional)</label><input class="inp" id="c-b" name="budget" inputmode="numeric" data-money placeholder="— tanpa budget" value="${c&&c.budget?idn(c.budget):''}"><span class="note">Kosongkan kalau insidental / tidak perlu dibatasi.</span></div>`:''}
+    <button class="btn pri block" type="submit">Simpan</button>
+    ${c?`<button type="button" class="btn block" data-act="catArchive" data-id="${c.id}">${I('archive','sm')} ${c.archived?'Aktifkan lagi':'Arsipkan (sembunyikan dari pilihan)'}</button>${!used && !hasKids?`<button type="button" class="btn danger block" data-act="catDelete" data-id="${c.id}">${I('trash','sm')} Hapus</button>`:`<p class="note">${used?`Dipakai di ${used} transaksi/aturan — tidak bisa dihapus agar riwayat tetap utuh; arsipkan saja.`:'Hapus sub-kategorinya dulu untuk menghapus grup ini.'}</p>`}`:''}
+  </form>`);
 }
 function sheetRecurringForm(type='expense'){
   if(needWallet()) return;
-  const cats = type==='income'?S.incCats:S.expCats;
   openSheet('Transaksi berulang', `<form class="form" data-form="recurring"><input type="hidden" name="type" value="${type}">
     <div class="seg full">${[['expense','Pengeluaran'],['income','Pemasukan'],['transfer','Transfer']].map(o=>`<button type="button" class="${type===o[0]?'on':''}" data-act="recType" data-k="${o[0]}">${o[1]}</button>`).join('')}</div>
     <div class="fld"><label for="rc-n">Nama</label><input class="inp" id="rc-n" name="name" required maxlength="40" placeholder="mis. Gaji, Sewa kontrakan, Internet" autofocus></div>
     <div class="frow"><div class="fld"><span class="flbl">Jumlah</span><input class="inp" name="amount" inputmode="numeric" data-money placeholder="0"></div><div class="fld"><label for="rc-d">Tiap tanggal</label><input class="inp" id="rc-d" name="day" type="number" min="1" max="31" value="1"></div></div>
     ${type==='transfer'?`<div class="fld"><span class="flbl">Dari</span>${walletChips('wallet',defWallet())}</div><div class="fld"><span class="flbl">Ke</span>${walletChips('to',(S.wallets.find(w=>!w.archived&&w.id!==defWallet())||{}).id)}</div>`
-      :`<div class="fld"><label for="rc-c">${type==='income'?'Sumber':'Kategori'}</label><select class="inp" id="rc-c" name="cat">${cats.map(c=>`<option value="${c.id}">${c.icon} ${esc(c.label)}</option>`).join('')}</select></div><div class="fld"><span class="flbl">Dompet</span>${walletChips('wallet',defWallet())}</div>`}
+      :`<div class="fld"><label for="rc-c">${type==='income'?'Sumber':'Kategori'}</label><select class="inp" id="rc-c" name="cat">${groupCats(type).map(g=>{ const kids=kidsOf(g.id,type); return kids.length?`<optgroup label="${esc(g.icon+' '+g.label)}">${kids.map(c=>`<option value="${c.id}">${c.icon} ${esc(c.label)}</option>`).join('')}</optgroup>`:`<option value="${g.id}">${g.icon} ${esc(g.label)}</option>`; }).join('')}</select></div><div class="fld"><span class="flbl">Dompet</span>${walletChips('wallet',defWallet())}</div>`}
     <div class="fld"><label for="rc-o">Atas nama</label><select class="inp" id="rc-o" name="owner">${memberOpts(S.user)}</select></div>
     <button class="btn pri block" type="submit">Simpan</button></form>`);
 }
 function sheetDrill(cid, m, kind){
   m=m||CUR_MONTH; const isInc=kind==='income'; const c=cat(cid,isInc?'income':'expense');
-  const list=S.txns.filter(t=>t.cat===cid && monthOf(t.date)===m && t.type===(isInc?'income':'expense'));
-  const tot=list.reduce((s,t)=>s+t.amount,0), b=isInc?0:budgetFor(m).cats[cid]||0;
-  openSheet(c.icon+' '+esc(c.label), `<div class="stats"><div class="stat"><span class="k">${fMonth(m)}${isPartial(m)?' (1–'+TODAY_DAY+')':''}</span><span class="v">${MC(tot)}</span></div>${isInc?`<div class="stat"><span class="k">Transaksi</span><span class="v">${list.length}</span></div>`:`<div class="stat"><span class="k">Budget</span><span class="v ${tot>b?'neg':''}">${MC(b)}</span><span class="d mut">${tot>b?'lewat '+rpc(tot-b):'sisa '+rpc(b-tot)}</span></div>`}</div>
+  const kids=kidsOf(cid, isInc?'income':'expense', true); const isGroup=kids.length>0;
+  const inCat = t => isGroup ? (groupOf(t.cat)||{}).id===cid : t.cat===cid;
+  const list=S.txns.filter(t=>t.cat && inCat(t) && monthOf(t.date)===m && t.type===(isInc?'income':'expense'));
+  const tot=list.reduce((s,t)=>s+t.amount,0), bud=budgetFor(m), b=isInc?0:(isGroup?groupBudget(c,bud):(bud.cats[cid]||0));
+  const subRows = isGroup ? kids.map(k=>{ const v=list.filter(t=>t.cat===k.id).reduce((s,t)=>s+t.amount,0); const kb=bud.cats[k.id]||0; return (v||kb)?`<div class="row" style="padding:10px 16px"><div class="mid"><div class="t1" style="font-size:14px">${k.icon} ${esc(k.label)}</div>${kb?`<div class="bar thin" style="margin-top:6px"><i class="${v>kb?'over':v>kb*.85?'warn':'ok'}" style="width:${Math.min(pct(v,kb),100)}%"></i></div>`:''}</div><div style="text-align:right"><b class="m num">${rpc(v)}</b><div class="mut" style="font-size:12px">${kb?'dari '+rpc(kb):'tanpa budget'}</div></div></div>`:''; }).join('') : '';
+  openSheet(c.icon+' '+esc(c.label), `<div class="stats"><div class="stat"><span class="k">${fMonth(m)}${isPartial(m)?' (1–'+TODAY_DAY+')':''}</span><span class="v">${MC(tot)}</span></div>${isInc||!b?`<div class="stat"><span class="k">Transaksi</span><span class="v">${list.length}</span>${!isInc?'<span class="d mut">tanpa budget</span>':''}</div>`:`<div class="stat"><span class="k">Budget</span><span class="v ${tot>b?'neg':''}">${MC(b)}</span><span class="d mut">${tot>b?'lewat '+rpc(tot-b):'sisa '+rpc(b-tot)}</span></div>`}</div>
+    ${subRows?`<div class="card list">${subRows}</div>`:''}
     <div class="card list" style="overflow:hidden">${dayGroups(list)||'<div class="empty">Tidak ada transaksi.</div>'}</div>`);
 }
 
@@ -335,7 +362,14 @@ const ACT = {
   budgetForm: ()=>sheetBudget(), budgetClear: ()=>run(()=>DB.clearBudgetMonth(UI.budgetMonth),'Kembali ke budget berulang'),
   goal: d => sheetGoal(d.id), goalForm: ()=>sheetGoalForm(),
   goalDelete: d => { const g=S.goals.find(x=>x.id===d.id); confirmIn(`Hapus tujuan <b>${esc(g.name)}</b>? Uangnya tidak ke mana-mana — hanya alokasinya yang hilang.`,'Hapus',()=>run(()=>DB.deleteGoal(d.id),'Tujuan dihapus'),()=>sheetGoal(d.id)); },
-  catForm: ()=>sheetCatForm(), recurringForm: ()=>sheetRecurringForm(),
+  catForm: d => { if(d.back==='add'){ const f=document.querySelector('[data-form=tx]'); if(f) UI.txDraft={...formData(f)}; } sheetCatForm({kind:d.kind, parent:d.parent, back:d.back}); },
+  catFormKind: d => sheetCatForm({kind:d.k}),
+  catEdit: d => sheetCatForm({id:d.id}), catKind: d => { UI.catKind=d.k; renderView(true); },
+  catArchive: d => { const c=cat(d.id); run(()=>DB.archiveCategory(d.id,!c.archived), c.archived?'Kategori aktif lagi':'Kategori diarsipkan'); },
+  catDelete: d => { const c=cat(d.id); confirmIn(`Hapus kategori <b>${esc(c.label)}</b>?`,'Hapus',()=>run(()=>DB.deleteCategory(d.id),'Kategori dihapus'),()=>sheetCatForm({id:d.id})); },
+  voice: d => voiceStart(d.t||'sim'),
+  voiceAdd: () => { closeSheet(); UI.inboxTab='queue'; go('inbox'); voiceStart('sim'); },
+  recurringForm: ()=>sheetRecurringForm(),
   segPick: (d,el) => { const seg=el.parentElement; seg.querySelectorAll('button').forEach(b=>b.classList.toggle('on',b===el)); el.closest('form').querySelector(`[name=${seg.dataset.radioSeg}]`).value=d.k; },
   toggleRecurring: d => { const r=S.recurring.find(x=>x.id===d.id); run(()=>DB.toggleRecurring(d.id,!r.active)); },
   postRecurring: d => { const r=S.recurring.find(x=>x.id===d.id); const date=CUR_MONTH+'-'+String(Math.min(r.day,TODAY_DAY)).padStart(2,'0');
@@ -364,10 +398,10 @@ function approveDraft(id, override){
   const err = validDraft(x); if(err){ toast(err,true); return; }
   run(()=>DB.approvePending(id, x), 'Disetujui & tercatat');
 }
-function newDraft(text, owner){
+function newDraft(text, owner, realDur){
   text=String(text||'').trim(); if(!text) return;
   const parsed=parseUtterance(text, owner);
-  const dur=Math.max(3,Math.min(15,Math.round(text.split(/\s+/).length*0.55)));
+  const dur=realDur ? Math.max(1,Math.min(120,realDur)) : Math.max(3,Math.min(15,Math.round(text.split(/\s+/).length*0.55)));
   UI.simText='';
   run(()=>DB.addPending(text, owner, parsed, dur), 'Draft masuk antrean review');
 }
@@ -432,13 +466,19 @@ const FORMS = {
     run(()=>DB.createReceivable({ person:fd.person.trim(), note:fd.note.trim(), amount, date:fd.date, due:fd.due, wallet:fd.wallet }),'Piutang dicatat'); },
   recvPay: (f,fd) => { const r=RECV(fd.id), i=recvInfo(r), amount=parseAmt(fd.amount); if(!amount) return formErr(f,'Masukkan jumlah.'); if(amount>i.out) return formErr(f,'Melebihi sisa piutang '+rp(i.out)+'.'); if(!fd.wallet) return formErr(f,'Pilih dompet.');
     run(()=>DB.addTxn({ date:fd.date, type:'recv_pay', amount, wallet:fd.wallet, recv:r.id, note:(amount===i.out?'Pelunasan dari ':'Cicilan dari ')+r.person }), amount===i.out?'Piutang lunas 🎉':'Pembayaran dicatat'); },
-  budget: (f,fd) => { const m=UI.budgetMonth; const total=parseAmt(fd.__total); if(!total) return formErr(f,'Isi budget total.');
-    const cats={}; S.expCats.forEach(c=>cats[c.id]=parseAmt(fd['c_'+c.id]));
+  budget: (f,fd) => { const m=UI.budgetMonth; const total=parseAmt(fd.__total); const cur=budgetFor(m);
+    const cats={}; leafCats('expense',true).forEach(c=>{ cats[c.id] = ('c_'+c.id) in fd ? parseAmt(fd['c_'+c.id]) : (cur.cats[c.id]||0); });
     if(fd.scope==='default') run(async()=>{ await DB.setBudgetDefault(total,cats); if(S.budgetOverride[m]) await DB.clearBudgetMonth(m); },'Budget disimpan');
     else run(()=>DB.setBudgetMonth(m,total,cats),'Budget '+fMonth(m)+' disimpan'); },
   goalDep: (f,fd,sub) => { const g=S.goals.find(x=>x.id===fd.id); const a=parseAmt(fd.amount); if(!a) return formErr(f,'Masukkan jumlah.'); run(()=>DB.setGoalSaved(g.id, Math.max(0,g.saved+a*Number(sub?.value||1))),'Alokasi diperbarui'); },
   goal: (f,fd) => { const t=parseAmt(fd.amount); if(!fd.name.trim()||!t) return formErr(f,'Isi nama dan target.'); run(()=>DB.addGoal({ icon:fd.icon||'🎯', name:fd.name.trim(), target:t, saved:parseAmt(fd.saved) }),'Tujuan ditambahkan'); },
-  cat: (f,fd) => { if(!fd.label.trim()) return formErr(f,'Isi nama kategori.'); run(()=>DB.addCategory({ kind:fd.ctype, label:fd.label.trim(), icon:fd.icon||'🏷️', budget:fd.ctype==='expense'?parseAmt(fd.budget):0 }),'Kategori ditambahkan'); },
+  cat: async (f,fd) => { const label=fd.label.trim(); if(!label) return formErr(f,'Isi nama kategori.');
+    const kind=fd.ctype; const parent=fd.parent||null; const pg=parent?cat(parent):null;
+    if(catList(kind).some(c=>c.id!==fd.id && !c.archived && (c.parent||null)===parent && c.label.toLowerCase()===label.toLowerCase())) return formErr(f,'Nama ini sudah ada di tempat yang sama.');
+    const data={ kind, label, icon:(fd.icon||'').trim()||(pg?pg.icon:'🏷️'), budget:kind==='expense'?parseAmt(fd.budget):0, parent, tint:pg?pg.tint:undefined, sort:parent?kidsOf(parent,kind,true).length+1:groupCats(kind,true).length+1 };
+    if(fd.id){ const c=cat(fd.id); if(catList(kind).some(x=>x.parent===c.id)) data.parent=null; return run(()=>DB.updateCategory(fd.id,data),'Kategori diperbarui'); }
+    let newId=null; const ok = await run(async()=>{ const r=await DB.addCategory(data); newId=r&&r.id; }, parent?'Sub-kategori ditambahkan':'Kategori ditambahkan');
+    if(ok && fd.back==='add'){ const dr=UI.txDraft||{}; UI.txDraft=null; sheetAdd({ type:kind==='income'?'income':'expense', amount:parseAmt(dr.amount), date:dr.date, note:dr.note, owner:dr.owner, wallet:dr.wallet, cat:newId }); } },
   recurring: (f,fd) => { const amount=parseAmt(fd.amount), day=Number(fd.day); if(!fd.name.trim()||!amount) return formErr(f,'Isi nama dan jumlah.'); if(!(day>=1&&day<=31)) return formErr(f,'Tanggal 1–31.');
     if(!fd.wallet) return formErr(f,'Pilih dompet.'); if(fd.type==='transfer' && (!fd.to||fd.to===fd.wallet)) return formErr(f,'Dompet asal dan tujuan harus berbeda.');
     run(()=>DB.addRecurring({ name:fd.name.trim(), type:fd.type, amount, wallet:fd.wallet, to:fd.to||null, cat:fd.cat||null, day, owner:fd.owner }),'Transaksi berulang ditambahkan'); },
@@ -448,6 +488,26 @@ const FORMS = {
   simVN: (f,fd) => newDraft(fd.t, UI.simAs||S.user),
   tgSend: (f,fd) => newDraft(fd.t, S.user),
 };
+
+/* ---------- rekam suara langsung (Web Speech API, gratis, tanpa API key) ---------- */
+const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+const VOICE = { rec:null, on:false, text:'', start:0, err:null };
+function setVoiceUI(on){ document.querySelectorAll('[data-act=voice]').forEach(b=>{ b.classList.toggle('rec',on); const l=b.querySelector('.vl'); if(l) l.textContent = on ? 'Mendengarkan… ketuk lagi untuk selesai' : 'Tekan lalu bicara'; }); }
+function voiceStart(target){
+  if(!SpeechRec){ toast('Browser ini belum mendukung input suara. Pakai Chrome di Android atau Safari di iPhone — atau ketik saja kalimatnya.', true); return; }
+  if(VOICE.on && VOICE.rec){ try{ VOICE.rec.stop(); }catch(e){} return; }
+  const rec = new SpeechRec(); rec.lang='id-ID'; rec.interimResults=true; rec.continuous=false; rec.maxAlternatives=1;
+  Object.assign(VOICE, { rec, on:true, text:'', start:Date.now(), err:null });
+  const fieldSel = target==='tg' ? '[data-form=tgSend] input' : '[data-form=simVN] textarea';
+  let finalT='';
+  rec.onresult = e => { let interim=''; for(let i=e.resultIndex;i<e.results.length;i++){ const r=e.results[i]; if(r.isFinal) finalT+=r[0].transcript+' '; else interim+=r[0].transcript; }
+    VOICE.text=(finalT+interim).trim(); const fld=document.querySelector(fieldSel); if(fld) fld.value=VOICE.text; };
+  rec.onerror = e => { VOICE.err = e.error; };
+  rec.onend = () => { VOICE.on=false; setVoiceUI(false); const txt=VOICE.text.trim(); const dur=Math.round((Date.now()-VOICE.start)/1000);
+    if(!txt){ const er=VOICE.err; VOICE.err=null; toast(er==='not-allowed'||er==='service-not-allowed' ? 'Izin mikrofon ditolak — izinkan mikrofon untuk situs ini di pengaturan browser.' : er==='network' ? 'Pengenalan suara butuh internet. Coba lagi.' : 'Suara tidak terdengar. Coba lagi lebih dekat ke mikrofon.', true); return; }
+    VOICE.err=null; newDraft(txt, target==='tg' ? S.user : (UI.simAs||S.user), dur); };
+  try{ rec.start(); setVoiceUI(true); }catch(e){ VOICE.on=false; setVoiceUI(false); toast('Gagal mulai merekam: '+e.message, true); }
+}
 
 /* ---------- event delegation ---------- */
 document.addEventListener('click', e=>{
