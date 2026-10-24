@@ -55,8 +55,9 @@ function txSub(t){
   else parts.push(TYPE_LABEL[t.type]);
   return parts.join(' · ');
 }
+const fundTag = t => t.type!=='expense' ? '' : t.fundedFrom ? '<span class="tag warn">dari aset</span>' : W(t.wallet).role==='savings' ? '<span class="tag warn">luar budget</span>' : '';
 function txRow(t){
-  return `<button class="row" data-act="tx" data-id="${t.id}">${txTile(t)}<div class="mid"><div class="t1">${esc(t.note||cat(t.cat,t.type).label)}</div><div class="t2">${av(t.owner)}<span>${txSub(t)}</span>${t.source==='telegram'?'<span class="tag tg">VN</span>':''}${t.fundedFrom?'<span class="tag warn">dari aset</span>':''}</div></div>${amtChip(t)}</button>`;
+  return `<button class="row" data-act="tx" data-id="${t.id}">${txTile(t)}<div class="mid"><div class="t1">${esc(t.note||cat(t.cat,t.type).label)}</div><div class="t2">${av(t.owner)}<span>${txSub(t)}</span>${t.source==='telegram'?'<span class="tag tg">VN</span>':''}${fundTag(t)}${t.debt?'<span class="tag">cicilan</span>':''}</div></div>${amtChip(t)}</button>`;
 }
 function dayGroups(list){
   const by={}; list.forEach(t=>{ (by[t.date]=by[t.date]||[]).push(t); });
@@ -81,7 +82,7 @@ function vHome(){
   const chg = now.total - prev.total, chgP = pct(chg,prev.total);
   const f = flows(CUR_MONTH), fPrevSame = flows(prevMonth(CUR_MONTH), TODAY_DAY);
   const bud = budgetFor(CUR_MONTH), port = portfolio(null);
-  const remain = bud.total - f.expense, usedP = pct(f.expense,bud.total);
+  const remain = bud.total - f.budgetExp, usedP = pct(f.budgetExp,bud.total);
   const tot = now.wallets+now.invest+now.recv;
   const seg = [[now.wallets,'var(--s1)','Kas & bank'],[now.invest,'var(--s4)','Investasi'],[now.recv,'var(--s3)','Piutang']];
   const pend = S.pending.length;
@@ -105,7 +106,7 @@ function vHome(){
     </div>
     <div class="stats">
       <button class="stat" data-act="go" data-v="income"><span class="k"><span class="k-ico" style="background:var(--pos-s);color:var(--pos)">${I('arrin','xs')}</span>Pemasukan ${MON[TODAY_DAY?Number(CUR_MONTH.slice(5))-1:0]}</span><span class="v">${MC(f.income)}</span><span class="d">${deltaTag(f.income,fPrevSame.income,true)} <span class="mut">vs 1–${TODAY_DAY} ${fMon(prevMonth(CUR_MONTH))}</span></span></button>
-      <button class="stat" data-act="go" data-v="expense"><span class="k"><span class="k-ico" style="background:var(--neg-s);color:var(--neg)">${I('arrout','xs')}</span>Pengeluaran</span><span class="v">${MC(f.expense)}</span><span class="d">${deltaTag(f.expense,fPrevSame.expense)} <span class="mut">vs 1–${TODAY_DAY} ${fMon(prevMonth(CUR_MONTH))}</span></span></button>
+      <button class="stat" data-act="go" data-v="expense"><span class="k"><span class="k-ico" style="background:var(--neg-s);color:var(--neg)">${I('arrout','xs')}</span>Pengeluaran</span><span class="v">${MC(f.expense)}</span><span class="d">${deltaTag(f.expense,fPrevSame.expense)} <span class="mut">vs 1–${TODAY_DAY} ${fMon(prevMonth(CUR_MONTH))}</span></span>${f.offExp?`<span class="d mut">budget ${rpc(f.budgetExp)} · luar ${rpc(f.offExp)}</span>`:''}</button>
       <button class="stat" data-act="go" data-v="budget"><span class="k"><span class="k-ico" style="background:var(--chip)">${I('gauge','xs')}</span>Sisa budget</span>${bud.any?`<span class="v ${remain<0?'neg':''}">${MC(remain)}</span><span class="d mut">terpakai ${idn(usedP)}% · hari ${TODAY_DAY}/${daysIn(CUR_MONTH)}</span>`:`<span class="v mut" style="font-size:16px">Belum diatur</span><span class="d mut">opsional · ketuk untuk atur</span>`}</button>
       <button class="stat" data-act="go" data-v="invest"><span class="k"><span class="k-ico" style="background:var(--chip)">${I('trend','xs')}</span>P/L investasi</span><span class="v ${port.unreal>=0?'pos':'neg'}">${MC(port.unreal,{sign:true})}</span><span class="d mut">${pctS(port.unrealPct)} belum terealisasi</span></button>
     </div>
@@ -144,7 +145,7 @@ function catCompare(m){
   const prev = flows(pm, same && isPartial(m) ? TODAY_DAY : null);
   const bud = budgetFor(m);
   const gs = groupCats('expense', true);
-  const rows = gs.map(g=>({ c:g, cur:cur.byGroup[g.id]||0, prev:prev.byGroup[g.id]||0, budget:groupBudget(g,bud),
+  const rows = gs.map(g=>({ c:g, cur:cur.byGroup[g.id]||0, curB:cur.byGroupB[g.id]||0, prev:prev.byGroup[g.id]||0, budget:groupBudget(g,bud),
       subs: kidsOf(g.id,'expense',true).map(k=>({ c:k, cur:cur.byCat[k.id]||0, budget:bud.cats[k.id]||0 })).filter(x=>x.cur||x.budget).sort((a,b)=>b.cur-a.cur) }))
     .filter(r=>r.cur||r.prev||r.budget).sort((a,b)=>b.cur-a.cur);
   return { cur, prev, bud, pm, same, rows };
@@ -153,23 +154,24 @@ function trayCategories(){
   const m=CUR_MONTH, x=catCompare(m);
   const label = x.same ? `${fMon(m)} 1–${TODAY_DAY} vs ${fMon(x.pm)} 1–${TODAY_DAY} (periode setara)` : `${fMon(m)} 1–${TODAY_DAY} (berjalan) vs ${fMon(x.pm)} penuh — periode tidak setara`;
   return `<section class="tray">${trayH('Pengeluaran per kategori',`<div class="seg"><button class="${x.same?'on':''}" data-act="catMode" data-k="same">Setara</button><button class="${!x.same?'on':''}" data-act="catMode" data-k="full">Bln penuh</button></div>`,label)}
-  <div class="card list">${x.rows.map(r=>{ const rem=r.budget-r.cur; const diff=r.cur-r.prev;
+  <div class="card list">${x.rows.map(r=>{ const rem=r.budget-r.curB; const diff=r.cur-r.prev; const off=r.cur-r.curB;
     const subs = r.subs.filter(x=>x.cur).slice(0,3).map(x=>esc(x.c.label)+' '+rpc(x.cur)).join(' · ');
-    return `<button class="crow" data-act="drill" data-c="${r.c.id}">${tile(r.c,'sm')}<div style="min-width:0"><div class="t1"><span>${esc(r.c.label)}</span></div><div class="t2 ell">${r.budget?`Budget ${rpc(r.budget)} · ${rem>=0?'sisa '+rpc(rem):`<b class="neg">lewat ${rpc(-rem)}</b>`}`:'Tanpa budget'} · lalu <span class="m">${rpc(r.prev)}</span>${diff?` (<span class="m">${rpc(diff,{sign:true})}</span>)`:''}</div>${subs?`<div class="t2 ell">${subs}</div>`:''}</div><div class="r"><b class="m">${rpc(r.cur)}</b>${deltaTag(r.cur,r.prev)}</div></button>`; }).join('')||'<div class="empty">Belum ada pengeluaran bulan ini.</div>'}</div></section>`;
+    return `<button class="crow" data-act="drill" data-c="${r.c.id}">${tile(r.c,'sm')}<div style="min-width:0"><div class="t1"><span>${esc(r.c.label)}</span></div><div class="t2 ell">${r.budget?`Budget ${rpc(r.budget)} · ${rem>=0?'sisa '+rpc(rem):`<b class="neg">lewat ${rpc(-rem)}</b>`}`:'Tanpa budget'}${off?` · luar budget ${rpc(off)}`:''} · lalu <span class="m">${rpc(r.prev)}</span>${diff?` (<span class="m">${rpc(diff,{sign:true})}</span>)`:''}</div>${subs?`<div class="t2 ell">${subs}</div>`:''}</div><div class="r"><b class="m">${rpc(r.cur)}</b>${deltaTag(r.cur,r.prev)}</div></button>`; }).join('')||'<div class="empty">Belum ada pengeluaran bulan ini.</div>'}</div></section>`;
 }
 
 function insights(){
   const m=CUR_MONTH, x=catCompare(m); const out=[]; const dim=daysIn(m);
   const top = x.rows.filter(r=>r.cur>0).slice(0,3);
   if(top.length) out.push({e:'🏆', t:`Terbesar bulan ini: <b>${top.map(r=>esc(r.c.label)).join(', ')}</b>`, s:`Ketiganya ${idn(top.reduce((s,r)=>s+r.cur,0)/x.cur.expense*100)}% dari total pengeluaran ${rpc(x.cur.expense)}.`});
+  if(x.cur.offExp) out.push({e:'🏦', t:`<b>${rpc(x.cur.offExp)}</b> dibayar di luar budget`, s:`Dari dompet tabungan/dana darurat${x.cur.assetExp?' dan hasil jual aset':''} — termasuk total pengeluaran, tapi tidak memotong budget bulanan.`});
   const ch = x.rows.filter(r=>r.prev>0 && r.cur>0).map(r=>({...r, d:r.cur-r.prev, p:(r.cur-r.prev)/r.prev*100}));
   const inc = ch.slice().sort((a,b)=>b.d-a.d)[0], dec = ch.slice().sort((a,b)=>a.d-b.d)[0];
   if(inc && inc.d>0) out.push({e:'📈', t:`<b>${esc(inc.c.label)}</b> naik ${idn(inc.p)}% (${rpc(inc.d,{sign:true})})`, s:`Dibanding ${fMon(x.pm)} 1–${TODAY_DAY}. Kenaikan rupiah terbesar bulan ini.`});
   if(dec && dec.d<0) out.push({e:'📉', t:`<b>${esc(dec.c.label)}</b> turun ${idn(Math.abs(dec.p))}% (${rpc(dec.d)})`, s:`Penurunan rupiah terbesar — pertahankan.`});
-  const over = x.rows.filter(r=>r.budget && r.cur>r.budget).sort((a,b)=>(b.cur-b.budget)-(a.cur-a.budget));
-  if(over.length) out.splice(1,0,{e:'🚨', t:`<b>${over.length} kategori</b> sudah lewat budget`, s: over.map(r=>`${esc(r.c.label)} +${rpc(r.cur-r.budget)}`).join(' · ')+` — masih ${dim-TODAY_DAY} hari lagi.`, warn:true});
-  const pace = x.rows.filter(r=>r.budget && r.cur<=r.budget && r.cur/TODAY_DAY*dim > r.budget*1.05 && !['g_tinggal','g_cicilan','g_nafkah'].includes(r.c.code));
-  pace.slice(0,1).forEach(r=>{ const proj=r.cur/TODAY_DAY*dim; out.push({e:'⏱️', t:`<b>${esc(r.c.label)}</b> diproyeksikan lewat ${rpc(proj-r.budget)}`, s:`Laju ${rpc(r.cur/TODAY_DAY)}/hari. Hemat ${rpc((proj-r.budget)/(dim-TODAY_DAY))}/hari sisa bulan ini supaya pas budget.`}); });
+  const over = x.rows.filter(r=>r.budget && r.curB>r.budget).sort((a,b)=>(b.curB-b.budget)-(a.curB-a.budget));
+  if(over.length) out.splice(1,0,{e:'🚨', t:`<b>${over.length} kategori</b> sudah lewat budget`, s: over.map(r=>`${esc(r.c.label)} +${rpc(r.curB-r.budget)}`).join(' · ')+` — masih ${dim-TODAY_DAY} hari lagi.`, warn:true});
+  const pace = x.rows.filter(r=>r.budget && r.curB<=r.budget && r.curB/TODAY_DAY*dim > r.budget*1.05 && !['g_tinggal','g_cicilan','g_nafkah'].includes(r.c.code));
+  pace.slice(0,1).forEach(r=>{ const proj=r.curB/TODAY_DAY*dim; out.push({e:'⏱️', t:`<b>${esc(r.c.label)}</b> diproyeksikan lewat ${rpc(proj-r.budget)}`, s:`Laju ${rpc(r.curB/TODAY_DAY)}/hari. Hemat ${rpc((proj-r.budget)/(dim-TODAY_DAY))}/hari sisa bulan ini supaya pas budget.`}); });
   const save = x.rows.filter(r=>r.prev>0).map(r=>({...r, gap:r.cur - Math.min(r.prev,r.budget||r.prev)})).filter(r=>r.gap>100000).sort((a,b)=>b.gap-a.gap)[0];
   if(save) out.push({e:'💡', t:`Potensi hemat: <b>${esc(save.c.label)}</b> sekitar ${rpc(save.gap)}`, s:`Kalau kembali ke level ${fMon(x.pm)} atau budget, mana yang lebih rendah.`});
   return out;
@@ -182,7 +184,7 @@ function trayInsights(){
 function trayWealth(series){
   const vals=series.map(p=>p.total), last=series[series.length-1], prev=series[series.length-2], first=series[0];
   CHARTS.wealth={ draw: el=>drawLine(el,{values:vals,labels:series.map(p=>p.short),color:'var(--ink)',height:190}),
-    tip: i=>{ const p=series[i]; return `<div class="th">${p.label} · ${fDate(p.date)}</div>${tipRow('var(--s1)','Kas & bank',rpc(p.wallets))}${tipRow('var(--s4)','Investasi',rpc(p.invest))}${tipRow('var(--s3)','Piutang',rpc(p.recv))}${tipRow('','Total',rp(p.total))}`; } };
+    tip: i=>{ const p=series[i]; return `<div class="th">${p.label} · ${fDate(p.date)}</div>${tipRow('var(--s1)','Kas & bank',rpc(p.wallets))}${tipRow('var(--s4)','Investasi',rpc(p.invest))}${tipRow('var(--s3)','Piutang',rpc(p.recv))}${p.liab?tipRow('var(--neg)','Utang',rpc(-p.liab)):''}${tipRow('','Total',rp(p.total))}`; } };
   const cell=(k,v,d)=>`<div><div class="k">${k}</div><div class="v">${v}</div>${d?`<div style="font-size:12.5px;margin-top:2px">${d}</div>`:''}</div>`;
   return `<section class="tray">${trayH('Tren kekayaan','',`Direkonstruksi dari saldo awal + seluruh transaksi`)}<div class="card">
     <div class="pad" style="padding-bottom:6px"><div class="chart" data-chart="wealth"></div></div>
@@ -190,24 +192,27 @@ function trayWealth(series){
       ${cell('Akhir bulan lalu',MC(prev.total),`<span class="${last.total-prev.total>=0?'pos':'neg'}">${rpc(last.total-prev.total,{sign:true})} (${pctS(pct(last.total-prev.total,prev.total))})</span>`)}
       ${cell('Sejak saldo awal ('+first.short+')',MC(first.total),`<span class="${last.total-first.total>=0?'pos':'neg'}">${rpc(last.total-first.total,{sign:true})} (${pctS(pct(last.total-first.total,first.total))})</span>`)}
       ${cell('Tahun lalu ('+fMon(CUR_MONTH.replace(/^\d{4}/,y=>y-1))+' '+(Number(CUR_MONTH.slice(0,4))-1)+')','<span class="mut" style="font-size:14px">Belum tersedia</span>','<span class="mut">Pencatatan baru mulai '+fDate(LEDGER_START)+' — tidak kami karang.</span>')}
-      ${cell('Liabilitas','<span class="m">Rp 0</span>','<span class="mut">Belum ada yang dicatat</span>')}
+      ${last.liab?cell('Liabilitas (utang)',MC(last.liab),`<button class="lnk" data-act="go" data-v="debts">${(S.debts||[]).filter(d=>debtInfo(d).out>0).length} cicilan berjalan</button>`):cell('Liabilitas','<span class="m">Rp 0</span>','<span class="mut">Belum ada yang dicatat</span>')}
     </div>
     <p class="note" style="padding:0 18px 16px">Nilai investasi historis memakai harga yang kamu catat per bulan. Kenaikan nilai pasar dipisahkan dari arus kas.</p>
   </div></section>`;
 }
 
+function fundSplit(f, compact){
+  const rows=[['var(--s1)','Dari budget bulanan',f.budgetExp,'Dompet berperan budget'],['var(--s4)','Dari tabungan / dana darurat',f.savingsExp,S.wallets.filter(w=>w.role==='savings'&&!w.archived).map(w=>w.short).join(', ')||'—'],['var(--s3)','Dari hasil jual aset',f.assetExp,'Ditandai saat mencatat']].filter((r,i)=>i===0||r[2]);
+  return `<div class="comp" style="margin:0;height:12px">${rows.map(r=>`<span style="flex:${Math.max(r[2],0)};background:${r[0]}"></span>`).join('')}</div>
+    <div class="alloc">${rows.map(r=>`<div><i class="sw" style="background:${r[0]}"></i><span>${r[1]}${compact?'':`<small class="mut" style="display:block;font-size:12px">${esc(r[3])}</small>`}</span><b class="m">${rpc(r[2])}</b><span class="mut" style="flex:none;width:42px;text-align:right">${f.expense?idn(r[2]/f.expense*100):0}%</span></div>`).join('')}
+    <div style="border-top:1px solid var(--line);padding-top:8px"><span style="flex:1"><b>Total pengeluaran</b></span><b class="m">${rpc(f.expense)}</b><span style="flex:none;width:42px"></span></div></div>`;
+}
 function trayFunding(){
   const f=flows(CUR_MONTH); const ent=Object.entries(f.byWallet).sort((a,b)=>b[1]-a[1]);
   const top=ent.slice(0,4), other=ent.slice(4).reduce((s,e)=>s+e[1],0); const cols=['var(--s1)','var(--s2)','var(--s3)','var(--s4)','var(--s5)'];
-  const items=top.map((e,i)=>({label:W(e[0]).short,v:e[1],c:cols[i]})); if(other) items.push({label:'Lainnya',v:other,c:cols[4]});
-  const funded = S.txns.filter(t=>t.type==='expense'&&t.fundedFrom);
-  const groups={}; funded.forEach(t=>{ (groups[t.fundedFrom]=groups[t.fundedFrom]||[]).push(t); });
-  const ex = Object.entries(groups).map(([sid,list])=>{ const s=S.txns.find(t=>t.id===sid); const used=list.reduce((a,t)=>a+t.amount,0); return s?`<div class="callout warn" style="flex-direction:column;gap:4px"><b style="color:var(--ink)">${fMon(monthOf(s.date))}: ${esc(s.note)} → ${rpc(s.amount)} masuk ${esc(W(s.wallet).short)}</b><span>Dipakai untuk ${list.map(t=>esc(t.note)+' ('+rpc(t.amount)+')').join(' dan ')}. Hanya <b>${rpc(used)}</b> yang dihitung pengeluaran; penjualan asetnya tidak, dan sisa ${rpc(s.amount-used)} tetap jadi kas.</span></div>`:''; }).join('');
-  return `<section class="tray">${trayH('Sumber dana pengeluaran','',`${fMonth(CUR_MONTH)} · per dompet pembayar`)}<div class="card pad" style="display:flex;flex-direction:column;gap:14px">
-    <div class="comp" style="margin:0;height:12px">${items.map(it=>`<span style="flex:${it.v};background:${it.c}"></span>`).join('')}</div>
-    <div class="alloc">${items.map(it=>`<div><i class="sw" style="background:${it.c}"></i><span>${esc(it.label)}</span><b class="m">${rpc(it.v)}</b><span class="mut" style="flex:none;width:42px;text-align:right">${idn(it.v/f.expense*100)}%</span></div>`).join('')}</div>
-    <div class="flbl">Pengeluaran yang didanai dari penjualan aset</div>
-    ${f.fromAsset?'':`<p class="note">Bulan ini: <b>Rp 0</b>. Riwayat:</p>`}${ex||'<p class="note">Belum ada.</p>'}
+  const items=top.map((e,i)=>({label:W(e[0]).short+(W(e[0]).role==='savings'?' · tabungan':''),v:e[1],c:cols[i]})); if(other) items.push({label:'Lainnya',v:other,c:cols[4]});
+  return `<section class="tray">${trayH('Sumber dana pengeluaran','',`${fMonth(CUR_MONTH)} · budget vs luar budget (harta)`)}<div class="card pad" style="display:flex;flex-direction:column;gap:14px">
+    ${fundSplit(f)}
+    <div class="flbl">Per dompet pembayar</div>
+    <div class="alloc">${items.map(it=>`<div><i class="sw" style="background:${it.c}"></i><span>${esc(it.label)}</span><b class="m">${rpc(it.v)}</b><span class="mut" style="flex:none;width:42px;text-align:right">${idn(it.v/f.expense*100)}%</span></div>`).join('')||'<p class="note">Belum ada pengeluaran.</p>'}</div>
+    <p class="note">Peran dompet (budget / tabungan) diatur di halaman Dompet → Ubah. Yang dibayar dari tabungan tetap masuk total pengeluaran, tapi tidak memotong budget.</p>
   </div></section>`;
 }
 
@@ -258,7 +263,7 @@ function txBlock(F, fixedType){
   <div class="note" style="padding:0 6px">${list.length} transaksi${tout?` · keluar <b class="m">${rp(tout)}</b>`:''}${tin?` · masuk <b class="m">${rp(tin)}</b>`:''}</div>
   ${list.length?`<div class="card list mobile-only" style="overflow:hidden">${dayGroups(list)}</div>
   <div class="card desk-only tbl-wrap"><table class="tbl"><thead><tr>${th('date','Tanggal','left')}${th('note','Keterangan','left')}${th('cat','Kategori','left')}${th('wallet','Dompet','left')}${th('owner','Oleh','left')}${th('amount','Jumlah')}</tr></thead><tbody>
-    ${sorted.slice(0,300).map(t=>`<tr class="click" data-act="tx" data-id="${t.id}"><td>${fDate(t.date)}</td><td style="text-align:left;max-width:280px;overflow:hidden;text-overflow:ellipsis">${esc(t.note)} ${t.source==='telegram'?'<span class="tag tg">VN</span>':''}${t.fundedFrom?' <span class="tag warn">dari aset</span>':''}</td><td style="text-align:left">${t.type==='expense'||t.type==='income'?cat(t.cat,t.type).icon+' '+esc(cat(t.cat,t.type).label):TYPE_LABEL[t.type]}</td><td style="text-align:left">${t.type==='transfer'?esc(W(t.wallet).short)+' → '+esc(W(t.to).short):esc(W(t.wallet).short)}</td><td style="text-align:left">${av(t.owner)} ${MEMBERS[t.owner].name}</td><td>${amtChip(t)}</td></tr>`).join('')}
+    ${sorted.slice(0,300).map(t=>`<tr class="click" data-act="tx" data-id="${t.id}"><td>${fDate(t.date)}</td><td style="text-align:left;max-width:280px;overflow:hidden;text-overflow:ellipsis">${esc(t.note)} ${t.source==='telegram'?'<span class="tag tg">VN</span>':''}${fundTag(t)}</td><td style="text-align:left">${t.type==='expense'||t.type==='income'?cat(t.cat,t.type).icon+' '+esc(cat(t.cat,t.type).label):TYPE_LABEL[t.type]}</td><td style="text-align:left">${t.type==='transfer'?esc(W(t.wallet).short)+' → '+esc(W(t.to).short):esc(W(t.wallet).short)}</td><td style="text-align:left">${av(t.owner)} ${MEMBERS[t.owner].name}</td><td>${amtChip(t)}</td></tr>`).join('')}
   </tbody></table></div>`:'<div class="card empty">Tidak ada transaksi untuk filter ini.</div>'}`;
 }
 function vHistory(){
@@ -267,13 +272,13 @@ function vHistory(){
 }
 function vFlow(kind){
   const isInc = kind==='income'; const F=UI.ff[kind];
-  const ms = ledgerMonths().slice(-6); const vals = ms.map(m=>{ const f=flows(m); return isInc?f.income:f.expense; });
+  const ms = ledgerMonths().slice(-6); const fl = ms.map(m=>flows(m)); const vals = fl.map(f=>isInc?f.income:f.expense);
   const cur = flows(CUR_MONTH), same = flows(prevMonth(CUR_MONTH),TODAY_DAY), full = flows(prevMonth(CUR_MONTH));
   const v = isInc?cur.income:cur.expense, vs = isInc?same.income:same.expense, vf = isInc?full.income:full.expense;
   const d = v-vs, p = vs? d/vs*100 : 0;
   const good = isInc ? d>=0 : d<=0;
-  CHARTS['flow-'+kind]={ draw: el=>drawGroupedBars(el,{labels:ms.map(m=>fMon(m)+(isPartial(m)?'*':'')),series:[{name:kind,color:isInc?'var(--s1)':'var(--s2)',values:vals}],height:190,refs: isInc?null:ms.map(m=>budgetFor(m).total)}),
-    tip: i=>{ const prevV = i? vals[i-1] : null; return `<div class="th">${monthLabel(ms[i])}</div>${tipRow(isInc?'var(--s1)':'var(--s2)',isInc?'Pemasukan':'Pengeluaran',rp(vals[i]))}${!isInc?tipRow('','Budget',rp(budgetFor(ms[i]).total)):''}${prevV!==null?tipRow('','vs bulan sebelumnya',rpc(vals[i]-prevV,{sign:true})+(prevV?' ('+pctS((vals[i]-prevV)/prevV*100)+')':'')):''}`; } };
+  CHARTS['flow-'+kind]={ draw: el=>drawGroupedBars(el,{labels:ms.map(m=>fMon(m)+(isPartial(m)?'*':'')),series: isInc?[{name:kind,color:'var(--s1)',values:vals}]:[{name:'Dari budget',color:'var(--s2)',values:fl.map(f=>f.budgetExp)},{name:'Luar budget',color:'var(--s4)',values:fl.map(f=>f.offExp)}],height:190,refs: isInc?null:ms.map(m=>budgetFor(m).total)}),
+    tip: i=>{ const prevV = i? vals[i-1] : null; return `<div class="th">${monthLabel(ms[i])}</div>${tipRow(isInc?'var(--s1)':'var(--s2)',isInc?'Pemasukan':'Pengeluaran',rp(vals[i]))}${!isInc?tipRow('var(--s2)','· dari budget',rp(fl[i].budgetExp))+tipRow('var(--s4)','· luar budget',rp(fl[i].offExp))+tipRow('','Budget',rp(budgetFor(ms[i]).total)):''}${prevV!==null?tipRow('','vs bulan sebelumnya',rpc(vals[i]-prevV,{sign:true})+(prevV?' ('+pctS((vals[i]-prevV)/prevV*100)+')':'')):''}`; } };
   const by = isInc?cur.byInc:cur.byGroup; const byPrev = isInc?same.byInc:same.byGroup;
   const ent = Object.entries(by).sort((a,b)=>b[1]-a[1]); const max = ent.length?ent[0][1]:1;
   return `<div class="cols"><div class="col">
@@ -282,8 +287,8 @@ function vFlow(kind){
       <div class="sgrid" style="border-top:1px solid var(--line)">
         <div><div class="k">vs ${fMon(prevMonth(CUR_MONTH))} 1–${TODAY_DAY} (setara)</div><div class="v ${good?'pos':'neg'}">${rpc(d,{sign:true})} <span style="font-size:13px">(${pctS(p)})</span></div></div>
         <div><div class="k">${fMon(prevMonth(CUR_MONTH))} penuh</div><div class="v">${MC(vf)}</div></div>
-      </div></div></section>
-    <section class="tray">${trayH('6 bulan terakhir','',isInc?'Gaji, freelance, usaha, hasil investasi. Transfer & pencairan aset tidak dihitung.':'Garis hitam = budget bulanan. Beli investasi & transfer tidak dihitung.')}<div class="card pad"><div class="chart" data-chart="flow-${kind}"></div><p class="note" style="margin-top:8px">* ${fMon(CUR_MONTH)} masih berjalan.</p></div></section>
+      </div>${isInc?'':`<div class="pad" style="border-top:1px solid var(--line);display:flex;flex-direction:column;gap:10px">${fundSplit(cur,true)}</div>`}</div></section>
+    <section class="tray">${trayH('6 bulan terakhir','',isInc?'Gaji, freelance, usaha, hasil investasi. Transfer & pencairan aset tidak dihitung.':'Garis hitam = budget bulanan (dibanding batang "dari budget"). Beli investasi & transfer tidak dihitung.')}<div class="card pad">${isInc?'':'<div class="legend" style="margin-bottom:8px"><span><i class="sw" style="background:var(--s2)"></i>Dari budget</span><span><i class="sw" style="background:var(--s4)"></i>Luar budget</span><span><i class="sw" style="background:var(--ink);height:3px"></i>Budget</span></div>'}<div class="chart" data-chart="flow-${kind}"></div><p class="note" style="margin-top:8px">* ${fMon(CUR_MONTH)} masih berjalan.</p></div></section>
     <section class="tray">${trayH(isInc?'Per sumber':'Per kategori','',`${fMon(CUR_MONTH)} 1–${TODAY_DAY} vs periode setara bulan lalu`)}<div class="card list">${ent.map(([id,val])=>{ const c=cat(id,isInc?'income':'expense'); return `<button class="crow" data-act="${isInc?'flowcat':'drill'}" data-c="${id}" data-kind="${kind}">${tile(c,'sm')}<div style="min-width:0"><div class="t1"><span>${esc(c.label)}</span></div><div class="bar thin" style="margin-top:7px"><i style="width:${val/max*100}%;background:${isInc?'var(--s1)':'var(--s2)'}"></i></div></div><div class="r"><b class="m">${rpc(val)}</b>${deltaTag(val,byPrev[id]||0,isInc)}</div></button>`; }).join('')||'<div class="empty">Belum ada.</div>'}</div></section>
   </div><div class="col">
     <section class="tray">${trayH('Daftar transaksi',`<button class="ibtn" data-act="add" data-type="${kind}" aria-label="Tambah">${I('plus','sm')}</button>`)}<div style="display:flex;flex-direction:column;gap:10px;padding:0 4px 4px">${txBlock(F,kind)}</div></section>
@@ -295,7 +300,7 @@ function wCard(w,b,stack){
   const light = ['bri','jago'].includes(w.brand);
   const owners = w.owner==='both'?Object.keys(MEMBERS):[w.owner];
   const wm = w.brand==='bca' && /xpresi/i.test(w.name) ? `<small>Tahapan</small>Xpresi BCA` : w.brand==='cash' ? '💵 Tunai' : esc(w.short);
-  return `<button class="wcard w-${w.brand} ${light?'light':''}" data-act="wallet" data-id="${w.id}"><span class="wm">${wm}</span><span class="bal m">${rp(b)}</span><span class="meta">${esc(w.name)} · ${w.acct?'•••• '+esc(w.acct.slice(-4)):({bank:'Rekening bank',ewallet:'E-wallet',cash:'Tunai',custom:'Lainnya'})[w.type]||w.type}</span><span class="own">${owners.map(o=>av(o)).join('')}</span></button>`;
+  return `<button class="wcard w-${w.brand} ${light?'light':''}" data-act="wallet" data-id="${w.id}"><span class="wm">${wm}</span><span class="bal m">${rp(b)}</span><span class="meta">${esc(w.name)} · ${w.acct?'•••• '+esc(w.acct.slice(-4)):({bank:'Rekening bank',ewallet:'E-wallet',cash:'Tunai',custom:'Lainnya'})[w.type]||w.type}</span><span class="own">${w.role==='savings'?'<span class="tag" style="background:rgba(255,255,255,.22);color:inherit;margin-right:6px">Tabungan</span>':''}${owners.map(o=>av(o)).join('')}</span></button>`;
 }
 function vWallets(){
   const b=balances(null); const act=S.wallets.filter(w=>!w.archived), arch=S.wallets.filter(w=>w.archived);
@@ -391,17 +396,34 @@ function vRecv(){
   </div></div>`;
 }
 
+/* ================= UTANG & CICILAN ================= */
+const debtTag = (d,i) => i.out===0 ? '<span class="tag ok">Lunas</span>' : i.paidThisMonth ? `<span class="tag ok">${MON[Number(CUR_MONTH.slice(5))-1]} sudah dibayar</span>` : `<span class="tag warn">${MON[Number(CUR_MONTH.slice(5))-1]} belum dibayar</span>`;
+function vDebts(){
+  const list=(S.debts||[]).filter(d=>!d.archived).map(d=>({d,i:debtInfo(d)})).sort((a,b)=>(b.i.out>0)-(a.i.out>0) || ((a.i.end||'9999')<(b.i.end||'9999')?-1:1));
+  const arch=(S.debts||[]).filter(d=>d.archived);
+  const out=list.reduce((s,x)=>s+x.i.out,0), monthly=list.filter(x=>x.i.out>0).reduce((s,x)=>s+Math.min(x.d.installment,x.i.out),0);
+  const unpaid=list.filter(x=>x.i.out>0 && !x.i.paidThisMonth);
+  return `<div class="cols"><div class="col">
+    <section class="tray">${trayH('Total utang berjalan')}<div class="card"><div class="wtotal">${M(out)}</div>
+      <div class="sgrid"><div><div class="k">Cicilan per bulan</div><div class="v m">${rpc(monthly)}</div></div><div><div class="k">Belum dibayar ${MON[Number(CUR_MONTH.slice(5))-1]}</div><div class="v ${unpaid.length?'neg':''}">${unpaid.length?unpaid.length+' cicilan':'—'}</div></div></div></div></section>
+    <div class="callout">${I('lock','sm')}<span>Sisa utang dihitung sebagai <b>liabilitas</b> (mengurangi kekayaan bersih). Bayar cicilan = <b>pengeluaran</b> di kategori budgetnya sekaligus mengurangi sisa utang. Barang yang dicicil belum dihitung sebagai aset sampai kamu menambahkannya di Investasi.</span></div>
+  </div><div class="col">
+    <section class="tray">${trayH('Daftar utang & cicilan',`<button class="ibtn" data-act="debtForm" aria-label="Tambah utang">${I('plus','sm')}</button>`)}<div class="card list">${list.map(({d,i})=>`<button class="row" data-act="debt" data-id="${d.id}" style="align-items:flex-start"><span class="tile">${d.cat?cat(d.cat).icon:'💳'}</span><div class="mid"><div class="t1" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span style="overflow:hidden;text-overflow:ellipsis">${esc(d.name)}</span>${debtTag(d,i)}</div><div class="t2">${esc(d.lender||d.note)}</div><div class="bar thin" style="margin-top:8px"><i class="${i.out===0?'ok':''}" style="width:${Math.min(i.paid/d.total*100,100)}%"></i></div><div class="t2" style="margin-top:4px;display:block">${d.tenor?`${i.n}/${d.tenor} cicilan`:`Dibayar <span class="m">${rpc(i.paid)}</span>`}${i.left?` · sisa ${i.left}× <span class="m">${rpc(d.installment)}</span>`:''}${i.end?` · lunas ${fMon(i.end)} ${i.end.slice(0,4)}`:''}</div></div><b class="m num" style="padding-top:2px">${rpc(i.out)}</b></button>`).join('')||'<div class="empty">Belum ada utang atau cicilan. Tekan + untuk menambahkan, mis. cicilan emas, KPR, paylater.</div>'}</div></section>
+    ${arch.length?`<section class="tray">${trayH('Diarsipkan')}<div class="card list">${arch.map(d=>`<button class="row" data-act="debt" data-id="${d.id}"><span class="tile sm">💳</span><div class="mid"><div class="t1">${esc(d.name)}</div><div class="t2">Sisa ${rp(debtInfo(d).out)}</div></div>${I('fwd','sm')}</button>`).join('')}</div></section>`:''}
+  </div></div>`;
+}
+
 /* ================= BUDGET ================= */
 function vBudget(){
   const m=UI.budgetMonth, bud=budgetFor(m), part=isPartial(m);
-  const f=flows(m); const spent=f.expense, remain=bud.total-spent, used=pct(spent,bud.total);
+  const f=flows(m); const spent=f.budgetExp, remain=bud.total-spent, used=pct(spent,bud.total);
   const ideal = part ? TODAY_DAY/daysIn(m)*100 : 100;
   const ms=ledgerMonths(); const i0=ms.indexOf(m);
   const groups=groupCats('expense',true).map(g=>{ const kids=kidsOf(g.id,'expense',true);
-      const subs=(kids.length?kids:[g]).map(c=>({c,b:bud.cats[c.id]||0,s:f.byCat[c.id]||0})).filter(x=>x.b||x.s||!x.c.archived);
-      return { g, kids:kids.length, b:groupBudget(g,bud), s:f.byGroup[g.id]||0, subs }; })
+      const subs=(kids.length?kids:[g]).map(c=>({c,b:bud.cats[c.id]||0,s:f.byCatB[c.id]||0})).filter(x=>x.b||x.s||!x.c.archived);
+      return { g, kids:kids.length, b:groupBudget(g,bud), s:f.byGroupB[g.id]||0, subs }; })
     .filter(x=>x.b||x.s).sort((a,b)=>(b.s/(b.b||1))-(a.s/(a.b||1)));
-  const hist=ms.map(x=>({m:x,a:flows(x).expense,b:budgetFor(x).total}));
+  const hist=ms.map(x=>({m:x,a:flows(x).budgetExp,b:budgetFor(x).total}));
   const anyHist = hist.some(x=>x.b>0);
   CHARTS.bcmp={ draw: el=>drawGroupedBars(el,{labels:hist.map(x=>fMon(x.m)+(isPartial(x.m)?'*':'')),series:[{name:'Aktual',color:'var(--s1)',values:hist.map(x=>x.a)}],refs:hist.map(x=>x.b),flags:hist.map(x=>x.b&&x.a>x.b?'Lewat':''),height:190}),
     tip: i=>`<div class="th">${monthLabel(hist[i].m)}</div>${tipRow('var(--s1)','Aktual',rp(hist[i].a))}${tipRow('','Budget',hist[i].b?rp(hist[i].b):'tanpa budget')}${hist[i].b?tipRow('','Selisih',rp(hist[i].b-hist[i].a,{sign:true})):''}` };
@@ -412,12 +434,13 @@ function vBudget(){
       <div class="bar" style="height:12px"><i class="${used>100?'over':used>ideal+5?'warn':''}" style="width:${Math.min(used,100)}%"></i>${part?`<span style="position:absolute;top:-3px;bottom:-3px;left:${ideal}%;width:2px;background:var(--ink2);border-radius:1px"></span>`:''}</div>
       <div style="display:flex;justify-content:space-between;font-size:13px" class="mut"><span>Terpakai <b class="m" style="color:var(--ink)">${rp(spent)}</b> (${idn(used)}%)</span><span>dari <span class="m">${rp(bud.total)}</span></span></div>
       ${part?`<p class="note">Garis = laju ideal hari ke-${TODAY_DAY} dari ${daysIn(m)} (${idn(ideal)}%). ${used>ideal?'Pengeluaran sedikit di atas laju ideal.':'Masih di bawah laju ideal.'}</p>`:''}
+      ${f.offExp?`<p class="note">Di luar budget (dibayar dari tabungan/aset): <b class="m">${rp(f.offExp)}</b> — tidak dihitung di sini. Total pengeluaran ${fMonth(m)}: <b class="m">${rp(f.expense)}</b>.</p>`:''}
       <p class="note">Sumber: <b>${src}</b>. ${bud.auto?'Total = jumlah budget per sub-kategori.':`Teralokasi ke sub-kategori <b class="m">${rp(bud.sum)}</b> dari total ${rp(bud.total)}${bud.sum>bud.total?' — <b class="neg">melebihi total</b>':''}.`} Sub-kategori tanpa budget tetap tercatat, hanya tidak dibatasi.</p>`
-    : `<div style="display:flex;flex-direction:column;gap:10px"><b style="font-size:17px">Belum ada budget untuk ${fMonth(m)}</b><p class="note">Budget itu opsional — semua pengeluaran tetap tercatat dan dianalisis. Kalau mau, isi budget default per sub-kategori (berlaku tiap bulan) atau khusus bulan ini saja.</p><p class="note">Terpakai bulan ini: <b class="m">${rp(spent)}</b></p><div class="btns"><button class="btn pri" data-act="go" data-v="recurring">${I('repeat','sm')} Budget berulang</button><button class="btn" data-act="budgetForm">${I('edit','sm')} Khusus ${MON[Number(m.slice(5))-1]}</button></div></div>`;
+    : `<div style="display:flex;flex-direction:column;gap:10px"><b style="font-size:17px">Belum ada budget untuk ${fMonth(m)}</b><p class="note">Budget itu opsional — semua pengeluaran tetap tercatat dan dianalisis. Kalau mau, isi budget default per sub-kategori (berlaku tiap bulan) atau khusus bulan ini saja.</p><p class="note">Terpakai dari budget bulan ini: <b class="m">${rp(spent)}</b>${f.offExp?` · luar budget ${rp(f.offExp)}`:''}</p><div class="btns"><button class="btn pri" data-act="go" data-v="recurring">${I('repeat','sm')} Budget berulang</button><button class="btn" data-act="budgetForm">${I('edit','sm')} Khusus ${MON[Number(m.slice(5))-1]}</button></div></div>`;
   return `<div style="display:flex;align-items:center;gap:8px"><button class="ibtn" data-act="bMonth" data-d="-1" ${i0<=0?'disabled style="opacity:.4"':''} aria-label="Bulan sebelumnya">${I('back','sm')}</button><div class="pillhead" style="justify-content:center;color:var(--ink)">${fMonth(m)}${part?' · berjalan':''}</div><button class="ibtn" data-act="bMonth" data-d="1" ${i0>=ms.length-1?'disabled style="opacity:.4"':''} aria-label="Bulan berikutnya">${I('fwd','sm')}</button></div>
   <div class="cols"><div class="col">
     <section class="tray">${trayH('Budget bulanan',`<button class="ibtn" data-act="go" data-v="recurring" aria-label="Budget berulang">${I('repeat','sm')}</button><button class="ibtn" data-act="budgetForm" aria-label="Atur budget bulan ini">${I('edit','sm')}</button>`)}<div class="card pad" style="display:flex;flex-direction:column;gap:12px">${summary}</div></section>
-    ${anyHist?`<section class="tray">${trayH('Budget vs aktual','',`Garis hitam = budget. Pengeluaran saja — tanpa transfer & beli investasi.`)}<div class="card pad"><div class="legend" style="margin-bottom:8px"><span><i class="sw" style="background:var(--s1)"></i>Aktual</span><span><i class="sw" style="background:var(--ink);height:3px"></i>Budget</span></div><div class="chart" data-chart="bcmp"></div></div></section>`:''}
+    ${anyHist?`<section class="tray">${trayH('Budget vs aktual','',`Garis hitam = budget. Hanya pengeluaran dari dompet budget — tanpa transfer, beli investasi, dan yang dibayar dari tabungan.`)}<div class="card pad"><div class="legend" style="margin-bottom:8px"><span><i class="sw" style="background:var(--s1)"></i>Aktual</span><span><i class="sw" style="background:var(--ink);height:3px"></i>Budget</span></div><div class="chart" data-chart="bcmp"></div></div></section>`:''}
   </div><div class="col">
     <section class="tray">${trayH('Per kategori','',`${groups.filter(x=>x.b&&x.s>x.b).length} kategori lewat budget · ketuk untuk lihat transaksi`)}<div class="card list">${groups.map(x=>{ const p=x.b?x.s/x.b*100:0;
       const head = `<button class="crow" data-act="drill" data-c="${x.g.id}" data-m="${m}">${tile(x.g,'sm')}<div style="min-width:0"><div class="t1"><span>${esc(x.g.label)}</span>${x.b&&p>100?'<span class="tag bad">lewat</span>':''}</div><div style="margin:7px 0 4px">${bar(x.s,x.b)}</div><div class="t2"><span class="m">${rpc(x.s)}</span> / <span class="m">${x.b?rpc(x.b):'tanpa budget'}</span></div></div><div class="r"><b class="m ${x.b&&x.b-x.s<0?'neg':''}">${x.b?rpc(x.b-x.s):'—'}</b><span class="delta flat">${x.b?(x.b-x.s<0?'lewat':'sisa')+' · '+idn(p)+'%':''}</span></div></button>`;
@@ -549,6 +572,6 @@ function vRecurring(){
 }
 function vMenu(){
   const p=portfolio(null), b=budgetFor(CUR_MONTH), f=flows(CUR_MONTH);
-  const items=[['invest','trend','Investasi',rpc(p.value)],['recv','coins','Piutang',rpc(recvTotal(null))],['budget','gauge','Budget',b.any?'sisa '+rpc(b.total-f.expense):'belum diatur'],['goals','target','Tujuan',S.goals.length+' tujuan'],['income','arrin','Pemasukan',rpc(f.income)],['expense','arrout','Pengeluaran',rpc(f.expense)],['inbox','mic','Inbox suara',S.pending.length+' menunggu'],['recurring','repeat','Berulang','budget & transaksi rutin'],['settings','sliders','Pengaturan','Tema, kategori, anggota']];
+  const items=[['invest','trend','Investasi',rpc(p.value)],['recv','coins','Piutang',rpc(recvTotal(null))],['debts','card','Utang & cicilan',rpc(debtTotal(null))],['budget','gauge','Budget',b.any?'sisa '+rpc(b.total-f.budgetExp):'belum diatur'],['goals','target','Tujuan',S.goals.length+' tujuan'],['income','arrin','Pemasukan',rpc(f.income)],['expense','arrout','Pengeluaran',rpc(f.expense)],['inbox','mic','Inbox suara',S.pending.length+' menunggu'],['recurring','repeat','Berulang','budget & transaksi rutin'],['settings','sliders','Pengaturan','Tema, kategori, anggota']];
   return `<div class="stats">${items.map(i=>`<button class="stat" data-act="go" data-v="${i[0]}" style="padding:16px"><span class="k-ico" style="width:40px;height:40px;border-radius:13px;background:var(--chip);color:var(--ink)">${I(i[1],'sm')}</span><span style="font-weight:700;font-size:15.5px;margin-top:10px">${i[2]}</span><span class="mut m" style="font-size:13px">${i[3]}</span></button>`).join('')}</div>`;
 }

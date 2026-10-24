@@ -78,13 +78,25 @@ function walletTotal(upto){ const b=balances(upto); return S.wallets.filter(w=>!
 
 /* ---------- pemasukan & pengeluaran ---------- */
 function inRange(t,m,uptoDay){ if(monthOf(t.date)!==m) return false; return !uptoDay || Number(t.date.slice(8))<=uptoDay; }
+/* Sumber dana pengeluaran:
+   - dari budget  : dibayar dari dompet berperan "budget" (default)
+   - luar budget  : dibayar dari dompet "tabungan / dana darurat" (harta), atau ditandai didanai dari jual aset.
+   Total pengeluaran = keduanya. Perbandingan dengan budget hanya memakai yang "dari budget". */
+const fundSource = t => t.fundedFrom ? 'asset' : (W(t.wallet).role==='savings' ? 'savings' : 'budget');
+const offBudget = t => t.type==='expense' && fundSource(t)!=='budget';
 function flows(m,uptoDay){
-  let income=0, expense=0; const byCat={}, byInc={}, byWallet={}, byGroup={}; let fromAsset=0;
+  let income=0, expense=0, budgetExp=0, savingsExp=0, assetExp=0; const byCat={}, byInc={}, byWallet={}, byGroup={}, byCatB={}, byGroupB={};
+  const add = (o,k,v) => o[k]=(o[k]||0)+v;
   S.txns.forEach(t=>{ if(!inRange(t,m,uptoDay)) return;
-    if(t.type==='income'){ income+=t.amount; byInc[t.cat]=(byInc[t.cat]||0)+t.amount; }
-    if(t.type==='expense'){ expense+=t.amount; byCat[t.cat]=(byCat[t.cat]||0)+t.amount; { const g=groupOf(t.cat); const gid=g?g.id:'_'; byGroup[gid]=(byGroup[gid]||0)+t.amount; } byWallet[t.wallet]=(byWallet[t.wallet]||0)+t.amount; if(t.fundedFrom) fromAsset+=t.amount; }
+    if(t.type==='income'){ income+=t.amount; add(byInc,t.cat,t.amount); }
+    if(t.type==='expense'){ expense+=t.amount; const g=groupOf(t.cat); const gid=g?g.id:'_';
+      add(byCat,t.cat,t.amount); add(byGroup,gid,t.amount); add(byWallet,t.wallet,t.amount);
+      const src=fundSource(t);
+      if(src==='budget'){ budgetExp+=t.amount; add(byCatB,t.cat,t.amount); add(byGroupB,gid,t.amount); }
+      else if(src==='savings') savingsExp+=t.amount; else assetExp+=t.amount; }
   });
-  return { income, expense, net:income-expense, byCat, byInc, byWallet, byGroup, fromAsset };
+  return { income, expense, net:income-expense, byCat, byInc, byWallet, byGroup, byCatB, byGroupB,
+    budgetExp, offExp:savingsExp+assetExp, savingsExp, assetExp, fromAsset:assetExp };
 }
 const isPartial = m => m===CUR_MONTH;
 const monthLabel = m => isPartial(m) ? fMon(m)+' (1–'+TODAY_DAY+')' : fMon(m);
@@ -141,9 +153,30 @@ function recvInfo(r, upto){
 }
 const recvTotal = upto => S.receivables.reduce((s,r)=>s+recvInfo(r,upto).out,0);
 
+/* ---------- utang & cicilan ----------
+   Sisa utang = total − dibayar sebelum pencatatan − pembayaran yang ditautkan (transaksi pengeluaran dengan debt).
+   Pembayaran tetap pengeluaran (masuk budget kategorinya) sekaligus mengurangi liabilitas. */
+const addMonths = (m,n) => { let [y,mo]=m.split('-').map(Number); mo+=n; y+=Math.floor((mo-1)/12); mo=((mo-1)%12+12)%12+1; return y+'-'+String(mo).padStart(2,'0'); };
+const monthsBetween = (a,b) => { const [y1,m1]=a.split('-').map(Number), [y2,m2]=b.split('-').map(Number); return (y2-y1)*12+(m2-m1); };
+const DEBT = id => S.debts.find(d=>d.id===id);
+function debtInfo(d, upto){
+  let paidL=0; const pays=[];
+  S.txns.forEach(t=>{ if(t.debt===d.id && (!upto||t.date<=upto)){ paidL+=t.amount; pays.push(t); } });
+  const started = !upto || d.start<=monthOf(upto);
+  const paid = d.paidBefore + paidL;
+  const out = started ? Math.max(0, d.total-paid) : 0;
+  const n = d.installment ? Math.floor(paid/d.installment+1e-9) : null;
+  const left = d.installment ? Math.ceil(out/d.installment-1e-9) : null;
+  const paidThisMonth = pays.some(t=>monthOf(t.date)===CUR_MONTH);
+  const end = d.tenor ? addMonths(d.start, d.tenor-1) : (left ? addMonths(paidThisMonth?nextMonth(CUR_MONTH):CUR_MONTH, left-1) : null);
+  const next = out>0 ? (paidThisMonth ? nextMonth(CUR_MONTH) : CUR_MONTH) : null;
+  return { paid, paidL, out, n, left, end, next, pays, paidThisMonth, status: out===0?'lunas':'berjalan' };
+}
+const debtTotal = upto => (S.debts||[]).reduce((s,d)=>s+debtInfo(d,upto).out,0);
+
 /* ---------- kekayaan ---------- */
 function wealthAt(upto){
-  const w = walletTotal(upto), p = portfolio(upto).value, r = recvTotal(upto), l = 0;
+  const w = walletTotal(upto), p = portfolio(upto).value, r = recvTotal(upto), l = debtTotal(upto);
   return { wallets:w, invest:p, recv:r, liab:l, total:w+p+r-l };
 }
 function wealthSeries(){ // rekonstruksi dari ledger lengkap: akhir tiap bulan sejak saldo awal

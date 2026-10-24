@@ -14,7 +14,7 @@ const UI = {
 const VIEWS = {
   home:{t:'Beranda', f:vHome, nav:'home'}, history:{t:'Riwayat', f:vHistory, nav:'history'}, wallets:{t:'Dompet', f:vWallets, nav:'wallets'},
   invest:{t:'Investasi', f:vInvest, nav:'invest'}, invDetail:{t:'', f:()=>vInvDetail(UI.param), back:'invest', nav:'invest'},
-  recv:{t:'Piutang', f:vRecv, nav:'recv'}, budget:{t:'Budget', f:vBudget, nav:'budget'}, goals:{t:'Tujuan', f:vGoals, nav:'goals'},
+  recv:{t:'Piutang', f:vRecv, nav:'recv'}, debts:{t:'Utang & cicilan', f:vDebts, nav:'debts'}, budget:{t:'Budget', f:vBudget, nav:'budget'}, goals:{t:'Tujuan', f:vGoals, nav:'goals'},
   income:{t:'Pemasukan', f:()=>vFlow('income'), nav:'income'}, expense:{t:'Pengeluaran', f:()=>vFlow('expense'), nav:'expense'},
   inbox:{t:'Inbox suara', f:vInbox, nav:'inbox'}, recurring:{t:'Berulang', f:vRecurring, nav:'recurring'}, settings:{t:'Pengaturan', f:vSettings, nav:'settings'}, menu:{t:'Menu', f:vMenu, nav:'menu'},
 };
@@ -48,7 +48,7 @@ function renderShell(){
       <div class="brandmark"><span class="lg">KK</span><div><b>${esc(S.household.name)}</b><span>${fDate(TODAY)}</span></div></div>
       <button class="btn pri addbtn" data-act="add">${I('plus','sm')} Catat transaksi</button>
       ${sideItem('home','home','Beranda')}${sideItem('history','history','Riwayat')}${sideItem('inbox','mic','Inbox suara')}
-      <div class="sec">Uang & aset</div>${sideItem('wallets','card','Dompet')}${sideItem('invest','trend','Investasi')}${sideItem('recv','coins','Piutang')}
+      <div class="sec">Uang & aset</div>${sideItem('wallets','card','Dompet')}${sideItem('invest','trend','Investasi')}${sideItem('recv','coins','Piutang')}${sideItem('debts','card','Utang & cicilan')}
       <div class="sec">Arus & rencana</div>${sideItem('income','arrin','Pemasukan')}${sideItem('expense','arrout','Pengeluaran')}${sideItem('budget','gauge','Budget')}${sideItem('recurring','repeat','Berulang')}${sideItem('goals','target','Tujuan')}
       <div class="sec">Lainnya</div>${sideItem('settings','sliders','Pengaturan')}
       <div class="me">${av(S.user,'md')}<div><b>${esc(MEMBERS[S.user].name)}</b>${esc(S.email)}</div></div>
@@ -133,7 +133,7 @@ function needWallet(){ if(S.wallets.some(w=>!w.archived)) return false; toast('T
 function sheetAdd(pre={}){
   if(needWallet()) return;
   const t = pre.id ? S.txns.find(x=>x.id===pre.id) : null;
-  const d = Object.assign({ type:'expense', amount:0, cat:null, wallet:defWallet(), to:null, date:TODAY, note:'', owner:S.user, fundedFrom:'' }, t||{}, pre);
+  const d = Object.assign({ type:'expense', amount:0, cat:null, wallet:defWallet(), to:null, date:TODAY, note:'', owner:S.user, fundedFrom:'', debt:'' }, t||{}, pre);
   if(!['expense','income','transfer'].includes(d.type)) d.type='expense';
   if(!d.wallet || !S.wallets.find(w=>w.id===d.wallet)) d.wallet=defWallet();
   if(d.type==='transfer' && (!d.to || d.to===d.wallet)) d.to = (S.wallets.find(w=>!w.archived && w.id!==d.wallet)||{}).id||'';
@@ -141,7 +141,7 @@ function sheetAdd(pre={}){
   if(d.type!=='transfer' && !leaves.find(c=>c.id===d.cat)){ const last=S.txns.slice().reverse().find(x=>x.type===d.type && x.owner===S.user && leaves.some(c=>c.id===x.cat)); d.cat = last ? last.cat : ''; }
   const sells = S.txns.filter(x=>x.type==='inv_sell').slice(-6);
   const body = `<form class="form" data-form="tx">
-    <input type="hidden" name="id" value="${t?t.id:''}"><input type="hidden" name="draft" value="${pre.draft||''}"><input type="hidden" name="type" value="${d.type}">
+    <input type="hidden" name="id" value="${t?t.id:''}"><input type="hidden" name="draft" value="${pre.draft||''}"><input type="hidden" name="type" value="${d.type}"><input type="hidden" name="debt" value="${d.type==='expense'&&d.debt?d.debt:''}">
     ${t?'':`<div class="seg full">${[['expense','Pengeluaran'],['income','Pemasukan'],['transfer','Transfer']].map(o=>`<button type="button" class="${d.type===o[0]?'on':''}" data-act="txType" data-k="${o[0]}">${o[1]}</button>`).join('')}</div>`}
     ${amountField(d.amount, !pre.draft)}
     ${d.type==='transfer' ? `<div class="fld"><span class="flbl">Dari dompet</span>${walletChips('wallet',d.wallet)}</div><div class="fld"><span class="flbl">Ke dompet</span>${walletChips('to',d.to)}</div><p class="note">Transfer antar dompet tidak dihitung sebagai pemasukan atau pengeluaran.</p>`
@@ -151,6 +151,7 @@ function sheetAdd(pre={}){
       <div class="fld"><label for="tx-o">Dicatat untuk</label><select class="inp" id="tx-o" name="owner">${memberOpts(d.owner||S.user)}</select></div></div>
     <div class="fld"><label for="tx-n">Catatan</label><input class="inp" id="tx-n" name="note" value="${esc(d.note)}" placeholder="mis. Superindo, bensin, gaji…" maxlength="80"></div>
     ${d.type==='expense'?`<div class="fld"><label for="tx-f">Didanai dari penjualan aset? (opsional)</label><select class="inp" id="tx-f" name="fundedFrom"><option value="">Tidak — dari kas biasa</option>${sells.map(s=>`<option value="${s.id}" ${d.fundedFrom===s.id?'selected':''}>${esc(s.note)} · ${fDate(s.date)}</option>`).join('')}</select><span class="note">Hanya penanda analisis. Penjualan asetnya sendiri tidak dihitung sebagai pengeluaran atau pemasukan.</span></div>`:''}
+    ${d.type==='expense'&&d.debt&&DEBT(d.debt)?`<div class="callout"><span>Tercatat sebagai pembayaran cicilan <b>${esc(DEBT(d.debt).name)}</b> — sisa utang ikut berkurang.</span></div>`:''}
     <button class="btn pri block" type="submit">${pre.draft?'Simpan & setujui draft':t?'Simpan perubahan':'Simpan transaksi'}</button>
     ${t?`<button type="button" class="btn danger block" data-act="txDelete" data-id="${t.id}">${I('trash','sm')} Hapus transaksi</button>`:''}
     ${t||pre.draft?'':`<button type="button" class="btn block" data-act="voiceAdd">${I('mic','sm')} Catat lewat suara</button>`}
@@ -161,11 +162,12 @@ function sheetTx(id){
   const t=S.txns.find(x=>x.id===id); if(!t) return;
   const editable=['expense','income','transfer'].includes(t.type);
   const link = t.inv ? `<button class="row" data-act="go" data-v="invDetail" data-p="${t.inv}"><span class="tile sm">${INV(t.inv)?.icon||'📈'}</span><div class="mid"><div class="t1">${esc(INV(t.inv)?.name||'Investasi')}</div><div class="t2">Dikelola dari halaman Investasi</div></div>${I('fwd','sm')}</button>`
+    : t.debt && DEBT(t.debt) ? `<button class="row" data-act="debt" data-id="${t.debt}"><span class="tile sm">💳</span><div class="mid"><div class="t1">Cicilan: ${esc(DEBT(t.debt).name)}</div><div class="t2">Sisa utang ${rp(debtInfo(DEBT(t.debt)).out)}</div></div>${I('fwd','sm')}</button>`
     : t.recv ? `<button class="row" data-act="recv" data-id="${t.recv}"><span class="tile sm">🤝</span><div class="mid"><div class="t1">Piutang ${esc(RECV(t.recv)?.person||'')}</div><div class="t2">Dikelola dari halaman Piutang</div></div>${I('fwd','sm')}</button>`
     : t.fundedFrom ? (()=>{ const s=S.txns.find(x=>x.id===t.fundedFrom); return s?`<div class="row"><span class="tile sm">${INV(s.inv)?.icon||'📈'}</span><div class="mid"><div class="t1">Didanai: ${esc(s.note)}</div><div class="t2">${fDate(s.date)} · ${rp(s.amount)}</div></div></div>`:''; })() : '';
   const kv=(k,v)=>`<div><div class="k">${k}</div><div class="v" style="font-size:15px">${v}</div></div>`;
   openSheet(TYPE_LABEL[t.type], `<div class="card"><div class="ovw"><div class="head">${txTile(t)}<div style="min-width:0"><div class="v ${['income','inv_sell','recv_pay'].includes(t.type)?'pos':''}">${M(['expense','inv_buy','recv_out'].includes(t.type)?-t.amount:t.amount, {sign:t.type!=='transfer'})}</div><div class="mut">${esc(t.note)}</div></div></div></div>
-    <div class="sgrid">${kv('Tanggal',fDate(t.date))}${kv('Dompet',t.type==='transfer'?esc(W(t.wallet).short)+' → '+esc(W(t.to).short):esc(W(t.wallet).name))}${t.cat?kv('Kategori',cat(t.cat,t.type).icon+' '+esc(cat(t.cat,t.type).label)):''}${kv('Oleh',av(t.owner)+' '+esc(MEMBERS[t.owner]?.name||'—'))}${kv('Sumber input',t.source==='telegram'?'<span class="tag tg">VN</span> disetujui':'Aplikasi')}${t.recurring?kv('Rutin','Ya — '+esc(S.recurring.find(r=>r.id===t.recurring)?.name||'')):''}</div></div>
+    <div class="sgrid">${kv('Tanggal',fDate(t.date))}${t.type==='expense'?kv('Sumber dana',{budget:'Budget bulanan',savings:'Tabungan (luar budget)',asset:'Jual aset (luar budget)'}[fundSource(t)]):''}${kv('Dompet',t.type==='transfer'?esc(W(t.wallet).short)+' → '+esc(W(t.to).short):esc(W(t.wallet).name))}${t.cat?kv('Kategori',cat(t.cat,t.type).icon+' '+esc(cat(t.cat,t.type).label)):''}${kv('Oleh',av(t.owner)+' '+esc(MEMBERS[t.owner]?.name||'—'))}${kv('Sumber input',t.source==='telegram'?'<span class="tag tg">VN</span> disetujui':'Aplikasi')}${t.recurring?kv('Rutin','Ya — '+esc(S.recurring.find(r=>r.id===t.recurring)?.name||'')):''}</div></div>
     ${link?`<div class="card list">${link}</div>`:''}
     ${editable?`<div class="btns"><button class="btn" data-act="txEdit" data-id="${t.id}">${I('edit','sm')} Ubah</button><button class="btn danger" data-act="txDelete" data-id="${t.id}">${I('trash','sm')} Hapus</button></div>`:'<p class="note">Transaksi aset & piutang diubah dari halamannya masing-masing agar saldo tetap konsisten.</p>'}`);
 }
@@ -194,6 +196,7 @@ function sheetWalletForm(id){
     <div class="fld"><span class="flbl">Tampilan kartu</span><div class="wsel" data-radio="brand">${brands.map(b=>`<button type="button" class="${w.brand===b[0]?'on':''}" data-val="${b[0]}"><span class="wdot w-${b[0]}"></span>${b[1]}</button>`).join('')}</div><input type="hidden" name="brand" value="${w.brand}"></div>
     <div class="frow"><div class="fld"><label for="w-o">Pemilik</label><select class="inp" id="w-o" name="owner">${memberOpts(w.owner,true)}</select></div>
       <div class="fld"><label for="w-a">No. rekening / HP (opsional)</label><input class="inp" id="w-a" name="acct" value="${esc(w.acct||'')}" inputmode="numeric" maxlength="40" placeholder="—"></div></div>
+    <div class="fld"><label for="w-r">Peran dompet</label><select class="inp" id="w-r" name="role"><option value="budget" ${w.role!=='savings'?'selected':''}>Budget bulanan — pengeluaran memotong budget</option><option value="savings" ${w.role==='savings'?'selected':''}>Tabungan / dana darurat — pengeluaran di luar budget</option></select><span class="note">Pengeluaran dari dompet tabungan tetap masuk total pengeluaran bulan itu, tapi dipisahkan sebagai "luar budget".</span></div>
     <div class="fld"><span class="flbl">Saldo awal</span><div class="amount-in"><span>Rp</span><input name="amount" inputmode="numeric" placeholder="0" data-money value="${id&&w.opening?idn(w.opening):''}"></div></div>
     <div class="fld"><label for="w-d">Saldo di atas per tanggal (awal hari)</label><input class="inp" id="w-d" type="date" name="openingDate" value="${id?w.openingDate:(LEDGER_START<=TODAY?LEDGER_START:TODAY)}" min="${LEDGER_START}" max="${firstTx||TODAY}">
       <span class="note">${id?`Isi saldo yang benar-benar ada di rekening pada tanggal ini. Mengubahnya akan menghitung ulang saldo sekarang dari awal${firstTx?` — tanggal tidak boleh setelah transaksi pertama (${fDate(firstTx)})`:''}.`:`Pilih tanggal mulai pencatatan (mis. 1 ${MON[Number(CUR_MONTH.slice(5))-1]}), lalu catat transaksi sejak tanggal itu.`}</span></div>
@@ -260,6 +263,34 @@ function sheetRecvPay(id){
     <div class="fld"><span class="flbl">Masuk ke dompet</span>${walletChips('wallet',S.txns.find(t=>t.recv===id)?.wallet||defWallet())}</div>
     <p class="note">Piutang berkurang dan saldo dompet bertambah dengan jumlah yang sama — bukan pemasukan.</p>
     <button class="btn pri block" type="submit">Simpan pembayaran</button></form>`);
+}
+
+/* ---------- sheet: utang & cicilan ---------- */
+function sheetDebt(id){
+  const d=DEBT(id); if(!d) return; const i=debtInfo(d);
+  const kv=(k,v)=>`<div><div class="k">${k}</div><div class="v m" style="font-size:15px">${v}</div></div>`;
+  const before = d.paidBefore ? `<div class="row"><span class="tile sm">🗂️</span><div class="mid"><div class="t1">Dibayar sebelum pencatatan</div><div class="t2">sebelum ${fDate(LEDGER_START)}${d.installment?` · ±${Math.round(d.paidBefore/d.installment)}× cicilan`:''}</div></div><span class="amt out"><span class="m">${rp(d.paidBefore)}</span></span></div>` : '';
+  openSheet('💳 '+esc(d.name), `<div class="card"><div class="ovw"><div class="mut" style="font-size:13px">Sisa utang</div><div class="v">${M(i.out)}</div><div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">${debtTag(d,i)}${i.end?`<span class="tag">lunas ${fMonth(i.end)}</span>`:''}</div><div class="bar" style="margin-top:12px"><i class="${i.out===0?'ok':''}" style="width:${Math.min(i.paid/d.total*100,100)}%"></i></div></div>
+    <div class="sgrid">${kv('Total utang',rp(d.total))}${kv('Sudah dibayar',rp(i.paid))}${kv('Cicilan / bulan',d.installment?rp(d.installment):'—')}${kv('Progres',d.tenor?`${i.n} dari ${d.tenor}×`:(i.n!=null?i.n+'×':'—'))}${kv('Mulai',fMonth(d.start))}${kv('Kategori budget',d.cat?esc(cat(d.cat).icon+' '+cat(d.cat).label):'—')}${d.lender?`<div style="grid-column:1/-1"><div class="k">Pemberi / tempat cicil</div><div class="v" style="font-size:15px">${esc(d.lender)}</div></div>`:''}${d.note?`<div style="grid-column:1/-1"><div class="k">Catatan</div><div class="v" style="font-size:15px">${esc(d.note)}</div></div>`:''}</div></div>
+    ${i.out>0&&!d.archived?`<button class="btn pri block" data-act="debtPay" data-id="${id}">${I('arrout','sm')} Catat bayar cicilan${d.installment?' '+rpc(Math.min(d.installment,i.out)):''}</button>`:''}
+    <div class="flbl" style="padding:0 6px">Riwayat pembayaran</div><div class="card list">${i.pays.slice().reverse().map(txRow).join('')}${before}${!i.pays.length&&!before?'<div class="empty">Belum ada pembayaran.</div>':''}</div>
+    <div class="btns"><button class="btn" data-act="debtForm" data-id="${id}">${I('edit','sm')} Ubah</button><button class="btn" data-act="debtArchive" data-id="${id}">${I('archive','sm')} ${d.archived?'Aktifkan lagi':'Arsipkan'}</button></div>
+    ${!i.pays.length?`<button class="btn danger block" data-act="debtDelete" data-id="${id}">${I('trash','sm')} Hapus</button>`:''}`);
+}
+function sheetDebtForm(id){
+  const d = id ? DEBT(id) : { name:'', lender:'', total:0, installment:0, tenor:null, start:CUR_MONTH, paidBefore:0, cat:null, note:'' };
+  const leafOpts = groupCats('expense').map(g=>{ const kids=kidsOf(g.id,'expense'); return kids.length?`<optgroup label="${esc(g.icon+' '+g.label)}">${kids.map(c=>`<option value="${c.id}" ${d.cat===c.id?'selected':''}>${c.icon} ${esc(c.label)}</option>`).join('')}</optgroup>`:`<option value="${g.id}" ${d.cat===g.id?'selected':''}>${g.icon} ${esc(g.label)}</option>`; }).join('');
+  openSheet(id?'Ubah utang / cicilan':'Utang / cicilan baru', `<form class="form" data-form="debt"><input type="hidden" name="id" value="${id||''}">
+    <div class="fld"><label for="d-n">Nama</label><input class="inp" id="d-n" name="name" value="${esc(d.name)}" required maxlength="50" placeholder="mis. Cicilan emas 10 g, KPR, Paylater" autofocus></div>
+    <div class="fld"><label for="d-l">Pemberi / tempat cicil (opsional)</label><input class="inp" id="d-l" name="lender" value="${esc(d.lender)}" maxlength="40" placeholder="mis. Pegadaian, Bank X, Ibu"></div>
+    <div class="frow"><div class="fld"><label for="d-i">Cicilan per bulan</label><input class="inp" id="d-i" name="installment" inputmode="numeric" data-money value="${d.installment?idn(d.installment):''}" placeholder="0"></div><div class="fld"><label for="d-t">Tenor (kali, opsional)</label><input class="inp" id="d-t" name="tenor" type="number" min="1" max="600" value="${d.tenor||''}" placeholder="—"></div></div>
+    <div class="fld"><span class="flbl">Total utang</span><div class="amount-in"><span>Rp</span><input name="total" inputmode="numeric" data-money value="${d.total?idn(d.total):''}" placeholder="cicilan × tenor"></div><span class="note">Kosong = cicilan × tenor.</span></div>
+    <div class="frow"><div class="fld"><label for="d-s">Mulai cicilan (bulan)</label><input class="inp" id="d-s" name="start" type="month" value="${d.start}" max="${CUR_MONTH}"></div><div class="fld"><label for="d-p">Dibayar sebelum ${fMon(monthOf(LEDGER_START))} ${LEDGER_START.slice(0,4)}</label><input class="inp" id="d-p" name="paidBefore" inputmode="numeric" data-money value="${id?(d.paidBefore?idn(d.paidBefore):''):''}" placeholder="otomatis"></div></div>
+    <p class="note" id="d-hint">Kosong = otomatis: jumlah bulan dari mulai cicilan sampai sebelum pencatatan (${fDate(LEDGER_START)}) × cicilan per bulan. Pembayaran sejak itu dicatat sebagai transaksi.</p>
+    <div class="fld"><label for="d-c">Kategori budget untuk pembayaran</label><select class="inp" id="d-c" name="cat"><option value="">— tanpa kategori khusus</option>${leafOpts}</select><span class="note">Setiap pengeluaran di kategori ini otomatis dihitung sebagai bayar cicilan (selama utang belum lunas).</span></div>
+    <div class="fld"><label for="d-no">Catatan (opsional)</label><input class="inp" id="d-no" name="note" value="${esc(d.note)}" maxlength="80"></div>
+    ${id?'':`<label class="row" style="padding:4px 2px;gap:10px;cursor:pointer"><input type="checkbox" name="linkPast" value="1" checked style="width:20px;height:20px"><span class="note" style="margin:0">Tautkan pengeluaran di kategori itu yang sudah tercatat sejak pencatatan dimulai</span></label>`}
+    <button class="btn pri block" type="submit">Simpan</button></form>`);
 }
 
 /* ---------- sheet: budget, tujuan, kategori, berulang, drilldown ---------- */
@@ -362,6 +393,11 @@ const ACT = {
   invMode: d => { UI.invMode=d.k; renderView(true); }, invFilter: d => { UI.invFilter=d.k; renderView(true); },
   trade: d => sheetTrade(d.id,d.side), invForm: ()=>sheetInvForm(), priceForm: d => sheetPrice(d.id),
   recv: d => sheetRecv(d.id), recvForm: ()=>sheetRecvForm(), recvPay: d => sheetRecvPay(d.id),
+  debt: d => sheetDebt(d.id), debtForm: d => sheetDebtForm(d.id),
+  debtPay: d => { const x=DEBT(d.id), i=debtInfo(x); const lastW=i.pays.length?i.pays[i.pays.length-1].wallet:null;
+    sheetAdd({ type:'expense', amount:Math.min(x.installment||i.out,i.out), cat:x.cat, wallet:lastW&&!W(lastW).archived?lastW:defWallet(), note:(/^cicil/i.test(x.name)?x.name:'Cicilan '+x.name)+(x.tenor&&i.n!=null?' ('+(i.n+1)+'/'+x.tenor+')':''), debt:x.id }); },
+  debtArchive: d => { const x=DEBT(d.id); run(()=>DB.archiveDebt(d.id,!x.archived), x.archived?'Diaktifkan lagi':'Diarsipkan'); },
+  debtDelete: d => { const x=DEBT(d.id); confirmIn(`Hapus <b>${esc(x.name)}</b>? Liabilitasnya hilang dari kekayaan bersih.`,'Hapus',()=>run(()=>DB.deleteDebt(d.id),'Dihapus'),()=>sheetDebt(d.id)); },
   bMonth: d => { const ms=ledgerMonths(); const i=ms.indexOf(UI.budgetMonth)+Number(d.d); if(ms[i]){ UI.budgetMonth=ms[i]; renderView(true); } },
   budgetForm: ()=>sheetBudget(), budgetMonthGo: d => { UI.budgetMonth=d.m; go('budget'); }, budgetClear: ()=>run(()=>DB.clearBudgetMonth(UI.budgetMonth),'Kembali ke budget berulang'),
   goal: d => sheetGoal(d.id), goalForm: ()=>sheetGoalForm(),
@@ -410,6 +446,14 @@ function newDraft(text, owner, realDur){
   UI.simText='';
   run(()=>DB.addPending(text, owner, parsed, dur), 'Draft masuk antrean review');
 }
+/* Pengeluaran di kategori yang ditautkan ke utang aktif otomatis dicatat sebagai cicilannya. */
+function debtFor(o, old, explicit){
+  if(o.type!=='expense') return null;
+  if(explicit && DEBT(explicit)) return explicit;
+  if(old && old.debt && old.cat===o.cat) return old.debt;
+  const d=(S.debts||[]).find(x=>!x.archived && x.cat && x.cat===o.cat && debtInfo(x).out>0);
+  return d ? d.id : null;
+}
 function txValid(f, o){
   if(!o.amount) return formErr(f,'Masukkan jumlah.');
   if(!o.wallet) return formErr(f,'Pilih dompet.');
@@ -440,13 +484,14 @@ const FORMS = {
   tx: (f,fd) => {
     const o={ type:fd.type, amount:parseAmt(fd.amount), wallet:fd.wallet, to:fd.type==='transfer'?fd.to:null, cat:fd.type==='transfer'?null:fd.cat, date:fd.date, owner:fd.owner, fundedFrom:fd.fundedFrom||null };
     if(txValid(f,o)!==true) return;
+    o.debt = debtFor(o, fd.id ? S.txns.find(x=>x.id===fd.id) : null, fd.debt);
     o.note = fd.note.trim() || (o.type==='transfer'?'Transfer ke '+W(o.to).short:cat(o.cat,o.type).label);
     if(fd.draft) return approveDraft(fd.draft, o);
     if(fd.id){ const old=S.txns.find(x=>x.id===fd.id); return run(()=>DB.updateTxn(fd.id,{...o, source:old.source, recurring:old.recurring}),'Perubahan disimpan'); }
     run(()=>DB.addTxn(o), `${TYPE_LABEL[o.type]} ${rp(o.amount)} tercatat`);
   },
   wallet: (f,fd) => { const name=fd.name.trim(); if(!name) return formErr(f,'Isi nama dompet.');
-    const w={ name, short:(fd.short||name).trim().slice(0,10), type:fd.type, brand:fd.brand, owner:fd.owner, acct:(fd.acct||'').replace(/\s+/g,''), opening:parseAmt(fd.amount), openingDate:fd.openingDate };
+    const w={ name, short:(fd.short||name).trim().slice(0,10), type:fd.type, brand:fd.brand, owner:fd.owner, acct:(fd.acct||'').replace(/\s+/g,''), opening:parseAmt(fd.amount), openingDate:fd.openingDate, role:fd.role==='savings'?'savings':'budget' };
     if(!fd.openingDate || fd.openingDate<LEDGER_START || fd.openingDate>TODAY) return formErr(f,'Tanggal saldo awal tidak valid.');
     if(fd.id){ const firstTx=S.txns.filter(t=>t.wallet===fd.id||t.to===fd.id).reduce((m,t)=>!m||t.date<m?t.date:m,null); if(firstTx && fd.openingDate>firstTx) return formErr(f,'Tanggal saldo awal tidak boleh setelah transaksi pertama dompet ini ('+fDate(firstTx)+').');
       return run(()=>DB.updateWallet(fd.id,w),'Dompet diperbarui'); }
@@ -479,6 +524,16 @@ const FORMS = {
     const cats={}; leafCats('expense',true).forEach(c=>{ cats[c.id] = ('c_'+c.id) in fd ? parseAmt(fd['c_'+c.id]) : (c.budget||0); });
     const curOv = S.budgetOverride[CUR_MONTH];
     run(async()=>{ await DB.setBudgetDefault(total,cats); }, curOv ? 'Budget berulang disimpan — '+fMonth(CUR_MONTH)+' masih memakai pengaturan khusus' : 'Budget berulang disimpan'); },
+  debt: async (f,fd) => { const name=fd.name.trim(); if(!name) return formErr(f,'Isi nama.');
+    const installment=parseAmt(fd.installment), tenor=fd.tenor?Number(fd.tenor):null; let total=parseAmt(fd.total);
+    if(!total && installment && tenor) total=installment*tenor;
+    if(!total) return formErr(f,'Isi total utang, atau cicilan per bulan + tenor.');
+    if(!/^\d{4}-\d{2}$/.test(fd.start||'')) return formErr(f,'Pilih bulan mulai cicilan.');
+    let paidBefore = fd.paidBefore==='' ? Math.max(0, monthsBetween(fd.start, monthOf(LEDGER_START)))*installment : parseAmt(fd.paidBefore);
+    paidBefore=Math.min(paidBefore,total);
+    const data={ name, lender:fd.lender.trim(), total, installment, tenor, start:fd.start, paidBefore, cat:fd.cat||null, note:fd.note.trim() };
+    if(fd.id) return run(()=>DB.updateDebt(fd.id,data),'Utang diperbarui');
+    run(async()=>{ const r=await DB.addDebt(data); if(fd.linkPast && data.cat && r && r.id){ const ids=S.txns.filter(t=>t.type==='expense' && t.cat===data.cat && !t.debt).map(t=>t.id); await DB.linkDebtTxns(r.id, ids); } },'Utang dicatat'); },
   goalDep: (f,fd,sub) => { const g=S.goals.find(x=>x.id===fd.id); const a=parseAmt(fd.amount); if(!a) return formErr(f,'Masukkan jumlah.'); run(()=>DB.setGoalSaved(g.id, Math.max(0,g.saved+a*Number(sub?.value||1))),'Alokasi diperbarui'); },
   goal: (f,fd) => { const t=parseAmt(fd.amount); if(!fd.name.trim()||!t) return formErr(f,'Isi nama dan target.'); run(()=>DB.addGoal({ icon:fd.icon||'🎯', name:fd.name.trim(), target:t, saved:parseAmt(fd.saved) }),'Tujuan ditambahkan'); },
   cat: async (f,fd) => { const label=fd.label.trim(); if(!label) return formErr(f,'Isi nama kategori.');

@@ -31,11 +31,11 @@ async function fetchAll(table, select='*', order='created_at'){
 async function loadAll(){
   const { data:{ user } } = await sb.auth.getUser();
   if(!user) { S=null; return null; }
-  const [hh, mem, wal, cats, invs, lots, prices, recvs, rules, txns, bo, goals, pend] = await Promise.all([
+  const [hh, mem, wal, cats, invs, lots, prices, recvs, rules, txns, bo, goals, pend, debts] = await Promise.all([
     fetchAll('households'), fetchAll('household_members'), fetchAll('wallets'), fetchAll('categories','*','sort'),
     fetchAll('investments'), fetchAll('investment_lots','*','date'), fetchAll('investment_prices','*','month'),
     fetchAll('receivables'), fetchAll('recurring_rules'), fetchAll('transactions','*','date'),
-    fetchAll('budget_overrides','*','month'), fetchAll('goals','*','sort'), fetchAll('pending_transactions'),
+    fetchAll('budget_overrides','*','month'), fetchAll('goals','*','sort'), fetchAll('pending_transactions'), fetchAll('debts'),
   ]);
   const me = mem.find(m=>m.user_id===user.id);
   if(!me || !hh.length){ S={ user:null, noMember:true, email:user.email }; return S; }
@@ -53,7 +53,7 @@ async function loadAll(){
   S = {
     user: me.id, email:user.email, household,
     wallets: wal.map(w=>({ id:w.id, name:w.name, short:w.short, type:w.type, brand:w.brand, owner:w.owner_member_id||'both',
-      opening:num(w.opening_balance), openingDate:w.opening_date, archived:w.archived, acct:w.account_no||'' })),
+      opening:num(w.opening_balance), openingDate:w.opening_date, archived:w.archived, acct:w.account_no||'', role:w.role||'budget' })),
     expCats: cats.filter(c=>c.kind==='expense').map(c=>({ id:c.id, kind:'expense', code:c.code, label:c.label, icon:c.icon, tint:c.tint, budget:num(c.budget)||0, parent:c.parent_id||null, archived:c.archived, sort:c.sort, custom:!c.code })),
     incCats: cats.filter(c=>c.kind==='income').map(c=>({ id:c.id, kind:'income', code:c.code, label:c.label, icon:c.icon, tint:c.tint, budget:0, parent:c.parent_id||null, archived:c.archived, sort:c.sort, custom:!c.code })),
     investments: invs.filter(i=>!i.archived).map(i=>({ id:i.id, type:i.type, name:i.name, symbol:i.symbol, unit:i.unit, icon:i.icon, sub:i.note||'',
@@ -63,7 +63,9 @@ async function loadAll(){
     receivables: recvs.map(r=>({ id:r.id, person:r.person, note:r.note||'', amount:num(r.amount), date:r.date, due:r.due })),
     recurring: rules.map(r=>({ id:r.id, name:r.name, type:r.type, amount:num(r.amount), wallet:r.wallet_id, to:r.to_wallet_id, cat:r.category_id, day:r.day, owner:r.owner_member_id, active:r.active })),
     txns: txns.map(t=>({ id:t.id, date:t.date, type:t.type, amount:num(t.amount), wallet:t.wallet_id, to:t.to_wallet_id, cat:t.category_id, note:t.note,
-      owner:t.owner_member_id, source:t.source, inv:t.investment_id, lot:t.lot_id, recv:t.receivable_id, fundedFrom:t.funded_from, recurring:t.recurring_id, created:t.created_at })),
+      owner:t.owner_member_id, source:t.source, inv:t.investment_id, lot:t.lot_id, recv:t.receivable_id, fundedFrom:t.funded_from, recurring:t.recurring_id, debt:t.debt_id||null, created:t.created_at })),
+    debts: debts.map(d=>({ id:d.id, name:d.name, lender:d.lender||'', total:num(d.total), installment:num(d.installment)||0, tenor:d.tenor||null, start:d.start_month,
+      paidBefore:num(d.paid_before)||0, cat:d.category_id||null, note:d.note||'', archived:d.archived })),
     budgetTotal: num(household.budget_total), budgetOverride,
     goals: goals.map(g=>({ id:g.id, icon:g.icon, name:g.name, target:num(g.target), saved:num(g.saved) })),
     pending: pend.filter(p=>p.status==='pending').map(mapPending),
@@ -78,16 +80,20 @@ async function loadAll(){
 const must = ({ data, error }) => { if(error) throw error; return data; };
 const toTxnRow = o => ({ date:o.date, type:o.type, amount:Math.round(o.amount), wallet_id:o.wallet, to_wallet_id:o.type==='transfer'?o.to:null,
   category_id:o.type==='transfer'?null:(o.cat||null), note:o.note||'', owner_member_id:o.owner||S.user, source:o.source||'app',
-  funded_from:o.fundedFrom||null, recurring_id:o.recurring||null, investment_id:o.inv||null, receivable_id:o.recv||null });
+  funded_from:o.fundedFrom||null, recurring_id:o.recurring||null, investment_id:o.inv||null, receivable_id:o.recv||null,
+  debt_id:o.type==='expense'?(o.debt||null):null });
+
+const debtRow = d => ({ name:d.name, lender:d.lender||null, total:Math.round(d.total), installment:Math.round(d.installment||0), tenor:d.tenor||null,
+  start_month:d.start, paid_before:Math.round(d.paidBefore||0), category_id:d.cat||null, note:d.note||null });
 
 const DB = {
   addTxn: async o => must(await sb.from('transactions').insert(toTxnRow(o)).select('id').single()),
   updateTxn: async (id,o) => must(await sb.from('transactions').update({ ...toTxnRow(o), updated_at:new Date().toISOString() }).eq('id',id)),
   deleteTxn: async id => must(await sb.from('transactions').delete().eq('id',id)),
   addWallet: async w => must(await sb.from('wallets').insert({ name:w.name, short:w.short, type:w.type, brand:w.brand, owner_member_id:w.owner==='both'?null:w.owner,
-    account_no:w.acct||null, opening_balance:w.opening||0, opening_date:w.openingDate, sort:S.wallets.length })),
+    account_no:w.acct||null, opening_balance:w.opening||0, opening_date:w.openingDate, role:w.role||'budget', sort:S.wallets.length })),
   updateWallet: async (id,w) => must(await sb.from('wallets').update({ name:w.name, short:w.short, type:w.type, brand:w.brand, owner_member_id:w.owner==='both'?null:w.owner,
-    account_no:w.acct||null, opening_balance:w.opening||0, opening_date:w.openingDate }).eq('id',id)),
+    account_no:w.acct||null, opening_balance:w.opening||0, opening_date:w.openingDate, role:w.role||'budget' }).eq('id',id)),
   archiveWallet: async (id,flag) => must(await sb.from('wallets').update({ archived:flag }).eq('id',id)),
   trade: async (p) => must(await sb.rpc('record_trade', { p_investment:p.inv, p_side:p.side, p_date:p.date, p_qty:p.qty, p_price:p.price, p_fee:p.fee||0, p_wallet:p.wallet, p_note:p.note })),
   createInvestment: async (p) => must(await sb.rpc('create_investment', { p_type:p.type, p_name:p.name, p_symbol:p.symbol||'', p_unit:p.unit||'unit', p_icon:p.icon,
@@ -128,6 +134,11 @@ const DB = {
   approvePending: async (id, x) => must(await sb.rpc('approve_pending', { p_pending:id, p_type:x.type, p_amount:Math.round(x.amount), p_wallet:x.wallet, p_to:x.to||null,
     p_category:x.cat||null, p_date:x.date, p_note:x.note||'', p_owner:x.owner||null, p_funded:x.fundedFrom||null })),
   rejectPending: async id => must(await sb.from('pending_transactions').update({ status:'rejected', reviewed_by:S.user, reviewed_at:new Date().toISOString() }).eq('id',id).eq('status','pending')),
+  addDebt: async d => must(await sb.from('debts').insert(debtRow(d)).select('id').single()),
+  updateDebt: async (id,d) => must(await sb.from('debts').update(debtRow(d)).eq('id',id)),
+  archiveDebt: async (id,flag) => must(await sb.from('debts').update({ archived:flag }).eq('id',id)),
+  deleteDebt: async id => must(await sb.from('debts').delete().eq('id',id)),
+  linkDebtTxns: async (id, ids) => { if(ids.length) must(await sb.from('transactions').update({ debt_id:id }).in('id',ids)); },
   inviteMember: async (email,name) => must(await sb.from('household_members').insert({ household_id:S.household.id, email:email.trim().toLowerCase(), display_name:name, color_idx:Object.keys(MEMBERS).length })),
   removeInvite: async id => must(await sb.from('household_members').delete().eq('id',id)),
   updateMember: async (id, patch) => must(await sb.from('household_members').update(patch).eq('id',id)),
