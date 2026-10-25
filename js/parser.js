@@ -81,10 +81,20 @@ const CAT_KEYWORDS = {
   transport:['parkir','tol','ojol','ojek','gojek','grab','kereta','krl','busway','transjakarta','bus','angkot','tiket'],
   makan:['makan','kopi','ngopi','bakso','nasi','gofood','grabfood','shopeefood','sarapan','martabak','warteg','padang','minum','seblak','mie','sate','soto','restoran','cafe'],
 };
-const INC_KEYWORDS = { gaji:['gaji','gajian','thr','bonus'], freelance:['freelance','proyek','project','klien','konsultasi'], usaha:['jualan','usaha','omzet','dagangan'], hasilinv:['bunga','dividen','kupon'] };
+const INC_KEYWORDS = { freelance:['edulab','edulabs','freelance','proyek','project','klien','konsultasi'], gaji:['gaji','gajian','thr','bonus'], usaha:['jualan','usaha','omzet','dagangan'], hasilinv:['bunga','dividen','kupon'] };
 const INCOME_HINT = ['gaji','gajian','terima','nerima','dapet','dapat','masuk','transferan','bonus','thr','freelance','cashback','bunga','dividen','jualan','omzet'];
 const TRANSFER_HINT = ['top up','topup','isi saldo','tarik tunai','pindahin','pindah ke','pindahkan','transfer ke','setor ke'];
 
+/* Speech-to-text sering salah tulis nama bank (mis. "seabank" → "c bank"). Samakan dulu sebelum dicocokkan. */
+const STT_FIX = [
+  [/\b(c|si|see|sea|shi|ci)\s?-?\s?(bank|bang|beng)\b/g,'seabank'], [/\bseabang\b/g,'seabank'],
+  [/\b(shopee|shopi|sopi|syopi|shoppe)\s?-?\s?(pay|pei|pe)\b/g,'shopeepay'], [/\bs\s?pay\b/g,'shopeepay'],
+  [/\bgo\s?-?\s?(pay|pei)\b/g,'gopay'],
+  [/\b(b\s?c\s?a|be\s?ce\s?a|bece\s?a|beca)\b/g,'bca'], [/\b(b\s?s\s?i|be\s?es\s?i)\b/g,'bsi'],
+  [/\b(b\s?n\s?i|be\s?en\s?i)\b/g,'bni'], [/\b(b\s?r\s?i|be\s?er\s?i)\b/g,'bri'],
+  [/\b(c\s?i\s?m\s?b|cimbi|simbi|sim\s?b|cim\s?b)\b/g,'cimb'], [/\bman\s?diri\b/g,'mandiri'], [/\bbank\s+jago\b/g,'jago'],
+];
+function normalizeSTT(s){ STT_FIX.forEach(([re,to])=>{ s=s.replace(re,to); }); return s; }
 const has = (s,k) => new RegExp('(^|[^a-z])'+k.replace(/[-]/g,'\\-')+'($|[^a-z])').test(s);
 const escRe = x => x.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
 function findWallets(s){
@@ -100,7 +110,8 @@ function findWallets(s){
 }
 
 function parseUtterance(text, owner){
-  const s = ' '+text.toLowerCase().replace(/\s+/g,' ')+' ';
+  text = normalizeSTT(text.toLowerCase().replace(/\s+/g,' ')).replace(/^./,c=>c.toUpperCase());
+  const s = ' '+text.toLowerCase()+' ';
   const amt = findAmount(text);
   const wallets = findWallets(s);
   let type = 'expense';
@@ -137,7 +148,8 @@ function parseUtterance(text, owner){
   let note = text;
   if(amt.span) note = note.replace(new RegExp(amt.span.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),'i'),' ');
   note = note.replace(/\b(rp\.?|rupiah)\b/gi,' ');
-  wallets.forEach(w=> note = note.replace(new RegExp('\\b(pakai|pake|via|lewat|dari|ke|masuk|bayar pakai|bayar pake|bayar)?\\s*'+w.alias+'\\b','i'),' '));
+  wallets.forEach(w=> note = note.replace(new RegExp('\\b(menggunakan|memakai|pakai|pake|via|lewat|dari|ke|masuk|bayar pakai|bayar pake|bayar)?\\s*(dompet|rekening|saldo)?\\s*'+w.alias+'\\b','i'),' '));
+  note = note.replace(/\b(sebesar|senilai|seharga)\b/gi,' ');
   note = note.replace(/\b(tadi|barusan|kemarin|hari ini|aku|saya|udah|sudah|nih|ya|dong|terus|trus|bayar|cash|tunai)\b/gi,' ').replace(/\s+/g,' ').trim();
   note = note.replace(/\b(tanggal|tgl)\s+\d{1,2}\b/gi,' ').replace(/\s+/g,' ').trim();
   note = note.charAt(0).toUpperCase()+note.slice(1);
