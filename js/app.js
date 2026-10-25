@@ -37,7 +37,7 @@ function renderLogin(msg){
       <p class="note">${reg?'Hanya email yang sudah diizinkan anggota keluarga yang bisa mendaftar.':'Belum punya kata sandi? Pilih <b>Daftar pertama kali</b> dengan email yang sudah diizinkan.'}</p>
     </div></form></div></div>`;
 }
-function renderLoading(text='Memuat data…'){ document.getElementById('root').innerHTML = `<div class="login"><div class="login-card" style="align-items:center;text-align:center;gap:10px"><div class="brandmark" style="justify-content:center;padding:0"><span class="lg">KK</span></div><p class="mut">${esc(text)}</p></div></div>`; }
+function renderLoading(text='Memuat data…'){ document.getElementById('root').innerHTML = `<div class="login"><div class="login-card" style="align-items:center;text-align:center;gap:10px"><div class="brandmark" style="justify-content:center;padding:0"><img class="lg" src="/assets/icons/logo-96.png?v=2" alt="" width="36" height="36"></div><p class="mut">${esc(text)}</p></div></div>`; }
 function renderNoMember(){ document.getElementById('root').innerHTML = `<div class="login"><div class="login-card"><section class="tray" style="padding:6px"><div class="card pad form"><b style="font-size:17px">Akun belum terhubung</b><p class="note">Kamu masuk sebagai <b>${esc(S.email)}</b>, tapi email ini belum terdaftar sebagai anggota keluarga.</p><button class="btn pri block" data-act="logout">Keluar</button></div></section></div></div>`; }
 
 /* ---------- shell ---------- */
@@ -45,7 +45,7 @@ function renderShell(){
   const sideItem=(v,ic,l)=>`<button class="nv" data-act="go" data-v="${v}" data-nav="${v}">${I(ic,'sm')}${l}${v==='inbox'?'<span class="dot-badge" data-badge></span>':''}</button>`;
   document.getElementById('root').innerHTML = `<div class="app">
     <aside class="side">
-      <div class="brandmark"><span class="lg">KK</span><div><b>${esc(S.household.name)}</b><span>${fDate(TODAY)}</span></div></div>
+      <div class="brandmark"><img class="lg" src="/assets/icons/logo-96.png?v=2" alt="" width="36" height="36"><div><b>${esc(S.household.name)}</b><span>${fDate(TODAY)}</span></div></div>
       <button class="btn pri addbtn" data-act="add">${I('plus','sm')} Catat transaksi</button>
       ${sideItem('home','home','Beranda')}${sideItem('history','history','Riwayat')}${sideItem('inbox','mic','Inbox suara')}
       <div class="sec">Uang & aset</div>${sideItem('wallets','card','Dompet')}${sideItem('invest','trend','Harta & investasi')}${sideItem('recv','coins','Piutang')}${sideItem('debts','receipt','Utang & cicilan')}
