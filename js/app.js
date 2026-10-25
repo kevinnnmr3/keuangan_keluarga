@@ -122,7 +122,24 @@ function toast(msg, bad){ const t=document.getElementById('toast'); t.innerHTML=
 /* ---------- helpers form ---------- */
 const parseAmt = v => Number(String(v||'').replace(/[^\d]/g,''))||0;
 const fmtInput = el => { const n=parseAmt(el.value); el.value = n? idn(n):''; };
-const walletChips = (name, sel, exclude) => { const b=balances(null); return `<div class="wsel" data-radio="${name}">${S.wallets.filter(w=>!w.archived && w.id!==exclude).map(w=>`<button type="button" class="${sel===w.id?'on':''}" data-val="${w.id}">${wDot(w.id)}<span>${esc(w.short)}<br><small class="mut m num" style="font-weight:550">${rpc(b[w.id])}</small></span></button>`).join('')}</div><input type="hidden" name="${name}" value="${sel||''}">`; };
+/* saldo tersedia per dompet; saat mengubah transaksi, efek transaksi itu dikeluarkan dulu */
+function availBalances(txId){ const b=balances(null); const t=txId&&S.txns.find(x=>x.id===txId); if(t) effects(t).forEach(e=>{ if(b[e.w]!==undefined) b[e.w]-=e.d; }); return b; }
+const walletChips = (name, sel, exclude, txId) => { const b=availBalances(txId); return `<div class="wsel" data-radio="${name}">${S.wallets.filter(w=>!w.archived && w.id!==exclude).map(w=>`<button type="button" class="${sel===w.id?'on':''}" data-val="${w.id}">${wDot(w.id)}<span>${esc(w.short)}<br><small class="mut m num ${b[w.id]<0?'neg':''}" style="font-weight:550">${rp(b[w.id])}</small></span></button>`).join('')}</div><input type="hidden" name="${name}" value="${sel||''}">`; };
+/* ringkasan langsung di form transaksi: saldo dompet & sisa budget setelah transaksi ini */
+function txHint(){
+  const f=document.querySelector('.sheet [data-form=tx]'); const box=document.getElementById('tx-hint'); if(!f||!box) return;
+  const fd=formData(f), amt=parseAmt(fd.amount), b=availBalances(fd.id||null); const lines=[];
+  const line=(lbl,before,after)=>`<div style="display:flex;justify-content:space-between;gap:10px"><span>${lbl}</span><span class="m num">${rp(before)} → <b class="${after<0?'neg':''}">${rp(after)}</b></span></div>`;
+  if(fd.wallet && W(fd.wallet)){ const w=W(fd.wallet), cur=b[fd.wallet]||0;
+    if(fd.type==='income') lines.push(line('Saldo '+esc(w.short),cur,cur+amt));
+    else { lines.push(line('Saldo '+esc(w.short),cur,cur-amt)); if(amt>cur) lines.push(`<span class="neg" style="font-size:12.5px">Melebihi saldo ${esc(w.short)} ${rp(amt-cur)} — cek lagi dompetnya.</span>`); } }
+  if(fd.type==='transfer' && fd.to && W(fd.to)){ const cur=b[fd.to]||0; lines.push(line('Saldo '+esc(W(fd.to).short),cur,cur+amt)); }
+  if(fd.type==='expense' && fd.cat && fd.wallet && (W(fd.wallet).role||'budget')==='budget'){ const m=monthOf(fd.date||TODAY), bud=budgetFor(m); const cb=bud.cats[fd.cat]||0;
+    if(cb){ const old=fd.id&&S.txns.find(x=>x.id===fd.id); let used=flows(m).byCatB[fd.cat]||0; if(old && old.cat===fd.cat && monthOf(old.date)===m && fundSource(old)==='budget') used-=old.amount;
+      lines.push(line('Sisa budget '+esc(cat(fd.cat).label)+' '+fMon(m),cb-used,cb-used-amt)); } }
+  if(fd.type==='expense' && fd.wallet && (W(fd.wallet).role||'budget')!=='budget') lines.push('<span class="mut" style="font-size:12.5px">Dibayar dari dompet luar budget — tidak memotong budget.</span>');
+  box.hidden=!lines.length; box.innerHTML=`<div style="display:flex;flex-direction:column;gap:4px;width:100%;font-size:13.5px">${lines.join('')}</div>`;
+}
 const amountField = (v,af=true) => `<div class="amount-in"><span>Rp</span><input name="amount" inputmode="numeric" placeholder="0" value="${v?idn(v):''}" data-money ${af?'autofocus':''} aria-label="Jumlah"></div><div class="quick">${[10000,25000,50000,100000,500000].map(q=>`<button type="button" data-act="qamt" data-v="${q}">+${rpc(q).replace('Rp ','')}</button>`).join('')}</div>`;
 function formData(form){ const o={}; new FormData(form).forEach((v,k)=>o[k]=v); return o; }
 function formErr(form,msg){ let e=form.querySelector('.ferr'); if(!e){ e=document.createElement('p'); e.className='note ferr'; e.style.color='var(--neg)'; const sb=form.querySelector('[type=submit]'); if(sb) sb.before(e); else form.appendChild(e); } e.textContent=msg; return false; }
@@ -143,10 +160,11 @@ function sheetAdd(pre={}){
   const body = `<form class="form" data-form="tx">
     <input type="hidden" name="id" value="${t?t.id:''}"><input type="hidden" name="draft" value="${pre.draft||''}"><input type="hidden" name="type" value="${d.type}"><input type="hidden" name="debt" value="${d.type==='expense'&&d.debt?d.debt:''}">
     ${t?'':`<div class="seg full">${[['expense','Pengeluaran'],['income','Pemasukan'],['transfer','Transfer']].map(o=>`<button type="button" class="${d.type===o[0]?'on':''}" data-act="txType" data-k="${o[0]}">${o[1]}</button>`).join('')}</div>`}
-    ${amountField(d.amount, !pre.draft)}
-    ${d.type==='transfer' ? `<div class="fld"><span class="flbl">Dari dompet</span>${walletChips('wallet',d.wallet)}</div><div class="fld"><span class="flbl">Ke dompet</span>${walletChips('to',d.to)}</div><p class="note">Transfer antar dompet tidak dihitung sebagai pemasukan atau pengeluaran.</p>`
+    ${amountField(d.amount, !pre.draft)}${d.type==='transfer'?`<div class="quick" style="margin-top:-6px"><button type="button" data-act="qall">Semua saldo dompet asal</button></div>`:''}
+    ${d.type==='transfer' ? `<div class="fld"><span class="flbl">Dari dompet · saldo tersedia</span>${walletChips('wallet',d.wallet,null,t&&t.id)}</div><div class="fld"><span class="flbl">Ke dompet</span>${walletChips('to',d.to,null,t&&t.id)}</div><p class="note">Transfer antar dompet tidak dihitung sebagai pemasukan atau pengeluaran.</p>`
       : `<div class="fld"><span class="flbl">${d.type==='income'?'Sumber':'Kategori'}</span>${catPicker(d.type, d.cat)}<input type="hidden" name="cat" value="${d.cat||''}"></div>
-         <div class="fld"><span class="flbl">${d.type==='income'?'Masuk ke':'Dibayar dari'}</span>${walletChips('wallet',d.wallet)}</div>`}
+         <div class="fld"><span class="flbl">${d.type==='income'?'Masuk ke':'Dibayar dari · saldo tersedia'}</span>${walletChips('wallet',d.wallet,null,t&&t.id)}</div>`}
+    <div class="callout" id="tx-hint" hidden></div>
     <div class="frow"><div class="fld"><label for="tx-d">Tanggal</label><input class="inp" id="tx-d" type="date" name="date" value="${d.date}" min="${LEDGER_START}" max="${TODAY}"></div>
       <div class="fld"><label for="tx-o">Dicatat untuk</label><select class="inp" id="tx-o" name="owner">${memberOpts(d.owner||S.user)}</select></div></div>
     <div class="fld"><label for="tx-n">Catatan</label><input class="inp" id="tx-n" name="note" value="${esc(d.note)}" placeholder="mis. Superindo, bensin, gaji…" maxlength="80"></div>
@@ -157,6 +175,8 @@ function sheetAdd(pre={}){
     ${t||pre.draft?'':`<button type="button" class="btn block" data-act="voiceAdd">${I('mic','sm')} Catat lewat suara</button>`}
   </form>`;
   openSheet(pre.draft?'Ubah draft suara':t?'Ubah transaksi':'Catat transaksi', body);
+  txHint();
+  document.querySelectorAll('.sheet .wsel .on').forEach(el=>{ const w=el.parentElement; w.scrollLeft=Math.max(0, el.offsetLeft-w.offsetLeft-12); });
 }
 function sheetTx(id){
   const t=S.txns.find(x=>x.id===id); if(!t) return;
@@ -377,7 +397,8 @@ const ACT = {
   txDelete: d => { const t=S.txns.find(x=>x.id===d.id); confirmIn(`Hapus <b>${esc(t.note)}</b> (${rp(t.amount)})? Saldo ${esc(W(t.wallet).short)} akan dihitung ulang.`,'Hapus',()=>run(()=>DB.deleteTxn(d.id),'Transaksi dihapus'),()=>sheetTx(d.id)); },
   txType: d => { const f=document.querySelector('[data-form=tx]'); const fd=formData(f); sheetAdd({type:d.k, amount:parseAmt(fd.amount), date:fd.date, note:fd.note, owner:fd.owner, wallet:fd.wallet, draft:fd.draft}); },
   recType: d => sheetRecurringForm(d.k),
-  qamt: d => { const i=document.querySelector('.sheet [data-money][name=amount]'); i.value=idn(parseAmt(i.value)+Number(d.v)); },
+  qamt: d => { const i=document.querySelector('.sheet [data-money][name=amount]'); i.value=idn(parseAmt(i.value)+Number(d.v)); txHint(); },
+  qall: () => { const f=document.querySelector('.sheet [data-form=tx]'); const fd=formData(f); const v=availBalances(fd.id||null)[fd.wallet]||0; f.querySelector('[name=amount]').value=v>0?idn(v):''; txHint(); },
   closeSheet: ()=>closeSheet(),
   confirmYes: ()=>CONFIRM.yes&&CONFIRM.yes(), confirmNo: ()=>{ if(CONFIRM.no) CONFIRM.no(); else closeSheet(); },
   collapse: (d,el) => { UI.collapsed[d.d]=!UI.collapsed[d.d]; if(el.closest('.sheet')){ el.classList.toggle('closed',UI.collapsed[d.d]); el.parentElement.querySelectorAll('.row').forEach(r=>r.hidden=UI.collapsed[d.d]); return; } renderView(true); },
@@ -576,7 +597,7 @@ function voiceStart(target){
 /* ---------- event delegation ---------- */
 document.addEventListener('click', e=>{
   const radio = e.target.closest('[data-radio] [data-val]');
-  if(radio){ const wrap=radio.closest('[data-radio]'); wrap.querySelectorAll('[data-val]').forEach(b=>b.classList.toggle('on',b===radio)); const inp=wrap.parentElement.querySelector(`input[name="${wrap.dataset.radio}"]`); if(inp) inp.value=radio.dataset.val; return; }
+  if(radio){ const wrap=radio.closest('[data-radio]'); wrap.querySelectorAll('[data-val]').forEach(b=>b.classList.toggle('on',b===radio)); const inp=wrap.parentElement.querySelector(`input[name="${wrap.dataset.radio}"]`); if(inp) inp.value=radio.dataset.val; if(radio.closest('[data-form=tx]')) txHint(); return; }
   const a = e.target.closest('[data-act]'); if(!a) return;
   const fn = ACT[a.dataset.act]; if(fn){ e.preventDefault(); fn(a.dataset, a); }
 });
@@ -584,6 +605,7 @@ document.addEventListener('submit', e=>{ const f=e.target.closest('[data-form]')
 document.addEventListener('input', e=>{
   const t=e.target;
   if(t.matches('[data-money]')){ const pos=t.value.length-t.selectionStart; fmtInput(t); try{ t.setSelectionRange(t.value.length-pos,t.value.length-pos); }catch(_){} }
+  if(t.closest('.sheet [data-form=tx]')) txHint();
   if(t.matches('[data-calc]')){ const f=t.closest('form'); const fd=formData(f); const inv=INV(fd.id); const h=holding(inv); const q=parseFloat(String(fd.qty).replace(',','.'))||0, p=parseAmt(fd.price), fee=parseAmt(fd.fee); const box=document.getElementById('trade-sum');
     if(box && q){ const total=fd.side==='buy'?q*p+fee:q*p-fee; box.innerHTML = fd.side==='buy' ? `Total dibayar <b class="m">${rp(total)}</b>` : `Diterima <b class="m">${rp(total)}</b> · estimasi realized P/L <b class="${total-h.avg*q>=0?'pos':'neg'}">${rp(total-h.avg*q,{sign:true})}</b>`; } }
   if(t.matches('[data-filter=q]')){ UI.hf.q=t.value; clearTimeout(t._d); t._d=setTimeout(()=>{ const pos=t.selectionStart; renderView(true); const ni=document.querySelector('[data-filter=q]'); if(ni){ ni.focus(); ni.setSelectionRange(pos,pos);} },220); }
