@@ -248,10 +248,19 @@ function sheetInvForm(){
     <p class="note">Deposito: isi jumlah 1 dan harga = pokok. Bunganya dicatat sebagai pemasukan "Hasil Investasi".</p>
     <button class="btn pri block" type="submit">Simpan</button></form>`);
 }
+function sheetValues(){
+  const list=S.investments.map(i=>({i,h:holding(i)})).filter(x=>x.i.type!=='deposit' && x.h.qty>0);
+  openSheet('Update nilai investasi', `<form class="form" data-form="values">
+    <p class="note">Ketik nilai terbaru dari aplikasi masing-masing (mis. Laku Emas, Treasury, aplikasi reksa dana). Hanya mengubah nilai pasar — kas, pemasukan & pengeluaran tidak tersentuh.</p>
+    <div class="card list">${list.map(({i,h})=>`<div class="row" style="padding:10px 14px"><span class="tile sm">${i.icon}</span><div class="mid"><div class="t1" style="font-size:14px;white-space:normal">${esc(i.name.replace(/^Emas - /,''))}</div><div class="t2">${idn(h.qty,h.qty%1?4:0)} ${esc(i.unit)}</div></div><input class="inp" style="width:128px;height:42px;text-align:right" name="v_${i.id}" inputmode="numeric" data-money value="${idn(Math.round(h.value))}" aria-label="Nilai ${esc(i.name)}"></div>`).join('')||'<div class="empty">Belum ada investasi.</div>'}</div>
+    <p class="note">Koperasi/deposito dinilai dari pokoknya — ubah lewat Tambah/Cairkan di halaman asetnya.</p>
+    <button class="btn pri block" type="submit">Simpan nilai</button></form>`);
+}
 function sheetPrice(id){
   const inv=INV(id), h=holding(inv);
-  openSheet('Perbarui harga', `<form class="form" data-form="price"><input type="hidden" name="id" value="${id}">
-    <div class="fld"><span class="flbl">Harga per ${esc(inv.unit)} — ${esc(inv.name)}</span><div class="amount-in"><span>Rp</span><input name="amount" inputmode="numeric" data-money value="${idn(h.price)}" autofocus></div></div>
+  openSheet('Update nilai · '+esc(inv.name), `<form class="form" data-form="price"><input type="hidden" name="id" value="${id}"><input type="hidden" name="src" value="value">
+    <div class="fld"><span class="flbl">Nilai total sekarang</span><div class="amount-in"><span>Rp</span><input name="value" inputmode="numeric" data-money data-psync="value" data-qty="${h.qty}" value="${idn(Math.round(h.value))}" autofocus></div><span class="note">Lihat angka "nilai" / "saldo" di aplikasi ${inv.type==='gold'?'emas':'investasinya'}, lalu ketik di sini. Modal ${rp(h.cost)}.</span></div>
+    <div class="fld"><label for="pr-u">atau harga per ${esc(inv.unit)} (${idn(h.qty,h.qty%1?4:0)} ${esc(inv.unit)})</label><input class="inp" id="pr-u" name="amount" inputmode="numeric" data-money data-psync="price" data-qty="${h.qty}" value="${idn(Math.round(h.price))}"></div>
     <p class="note">Hanya mengubah nilai pasar (unrealized P/L) — tidak menyentuh kas, pemasukan, atau pengeluaran. Harga ini juga disimpan sebagai harga bulan ${fMonth(CUR_MONTH)} untuk grafik.</p>
     <button class="btn pri block" type="submit">Simpan harga</button></form>`);
 }
@@ -412,7 +421,7 @@ const ACT = {
     if(!w.archived && Math.abs(b)>0){ confirmIn(`Arsipkan <b>${esc(w.name)}</b>? Saldonya masih <b>${rp(b)}</b> dan tetap dihitung di kekayaan. Sebaiknya transfer dulu ke dompet lain.`,'Tetap arsipkan',()=>run(()=>DB.archiveWallet(d.id,true),'Dompet diarsipkan'),()=>sheetWallet(d.id)); return; }
     run(()=>DB.archiveWallet(d.id,!w.archived), w.archived?'Dompet aktif lagi':'Dompet diarsipkan'); },
   invMode: d => { UI.invMode=d.k; renderView(true); }, invFilter: d => { UI.invFilter=d.k; renderView(true); },
-  trade: d => sheetTrade(d.id,d.side), invForm: ()=>sheetInvForm(), priceForm: d => sheetPrice(d.id),
+  trade: d => sheetTrade(d.id,d.side), invForm: ()=>sheetInvForm(), priceForm: d => sheetPrice(d.id), valuesForm: ()=>sheetValues(),
   recv: d => sheetRecv(d.id), recvForm: ()=>sheetRecvForm(), recvPay: d => sheetRecvPay(d.id),
   debt: d => sheetDebt(d.id), debtForm: d => sheetDebtForm(d.id),
   debtPay: d => { const x=DEBT(d.id), i=debtInfo(x); const lastW=i.pays.length?i.pays[i.pays.length-1].wallet:null;
@@ -532,7 +541,10 @@ const FORMS = {
     const icons={gold:'🥇',fund:'📊',stock:'📈',deposit:'🏦',other:'💎'};
     run(()=>DB.createInvestment({ type:fd.type, name:fd.name.trim(), symbol:fd.symbol.trim().toUpperCase(), unit:fd.unit.trim()||(fd.type==='gold'?'gram':fd.type==='stock'?'lembar':'unit'), icon:icons[fd.type],
       note:fd.note.trim(), qty, price, fee:parseAmt(fd.fee), date:fd.date, current:fd.type==='deposit'?null:(parseAmt(fd.cur)||price), wallet }),'Investasi ditambahkan'); },
-  price: (f,fd) => { const p=parseAmt(fd.amount); if(!p) return formErr(f,'Masukkan harga.'); run(()=>DB.setPrice(fd.id,p),'Harga diperbarui'); },
+  price: (f,fd) => { const h=holding(INV(fd.id)); const p = fd.src==='value' && h.qty ? parseAmt(fd.value)/h.qty : parseAmt(fd.amount); if(!p) return formErr(f,'Masukkan nilai.'); run(()=>DB.setPrice(fd.id,p),'Nilai diperbarui'); },
+  values: (f,fd) => { const ch=S.investments.filter(i=>('v_'+i.id) in fd).map(i=>({i,h:holding(i),v:parseAmt(fd['v_'+i.id])})).filter(x=>x.v>0 && x.h.qty>0 && x.v!==Math.round(x.h.value));
+    if(!ch.length){ closeSheet(); return toast('Tidak ada nilai yang berubah'); }
+    run(()=>Promise.all(ch.map(x=>DB.setPrice(x.i.id, x.v/x.h.qty))), ch.length+' nilai investasi diperbarui'); },
   recv: (f,fd) => { const amount=parseAmt(fd.amount); if(!fd.person.trim()||!amount) return formErr(f,'Isi nama dan jumlah.'); if(fd.due<fd.date) return formErr(f,'Jatuh tempo tidak boleh sebelum tanggal pinjam.'); if(!fd.wallet) return formErr(f,'Pilih dompet.');
     if(fd.date<W(fd.wallet).openingDate) return formErr(f,'Tanggal sebelum saldo awal dompet.');
     run(()=>DB.createReceivable({ person:fd.person.trim(), note:fd.note.trim(), amount, date:fd.date, due:fd.due, wallet:fd.wallet }),'Piutang dicatat'); },
@@ -606,6 +618,8 @@ document.addEventListener('input', e=>{
   const t=e.target;
   if(t.matches('[data-money]')){ const pos=t.value.length-t.selectionStart; fmtInput(t); try{ t.setSelectionRange(t.value.length-pos,t.value.length-pos); }catch(_){} }
   if(t.closest('.sheet [data-form=tx]')) txHint();
+  if(t.matches('[data-psync]')){ const f=t.closest('form'), q=Number(t.dataset.qty)||0, n=parseAmt(t.value); f.querySelector('[name=src]').value=t.dataset.psync;
+    const other=f.querySelector(`[data-psync="${t.dataset.psync==='value'?'price':'value'}"]`); if(other && q) other.value=n?idn(Math.round(t.dataset.psync==='value'?n/q:n*q)):''; }
   if(t.matches('[data-calc]')){ const f=t.closest('form'); const fd=formData(f); const inv=INV(fd.id); const h=holding(inv); const q=parseFloat(String(fd.qty).replace(',','.'))||0, p=parseAmt(fd.price), fee=parseAmt(fd.fee); const box=document.getElementById('trade-sum');
     if(box && q){ const total=fd.side==='buy'?q*p+fee:q*p-fee; box.innerHTML = fd.side==='buy' ? `Total dibayar <b class="m">${rp(total)}</b>` : `Diterima <b class="m">${rp(total)}</b> · estimasi realized P/L <b class="${total-h.avg*q>=0?'pos':'neg'}">${rp(total-h.avg*q,{sign:true})}</b>`; } }
   if(t.matches('[data-filter=q]')){ UI.hf.q=t.value; clearTimeout(t._d); t._d=setTimeout(()=>{ const pos=t.selectionStart; renderView(true); const ni=document.querySelector('[data-filter=q]'); if(ni){ ni.focus(); ni.setSelectionRange(pos,pos);} },220); }

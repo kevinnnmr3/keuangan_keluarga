@@ -334,7 +334,7 @@ function vInvest(){
   const bal=balances(null), sav=S.wallets.filter(w=>w.role==='savings'&&!w.archived);
   const hseg=[...sav.map((w,k)=>({l:w.short==='BSI'||sav.length===1?'Cash ('+w.short+')':w.short,v:bal[w.id],c:k?'var(--s5)':'var(--pos)'})), ...types.map(t=>({l:INV_TYPES[t].label,v:p.byType[t],c:INV_TYPES[t].color}))].filter(x=>x.v>0);
   const htot=hseg.reduce((a,x)=>a+x.v,0);
-  const hartaTray = `<section class="tray">${trayH('Kondisi harta','',`Dompet tabungan + investasi · per ${fDate(TODAY)}`)}<div class="card pad" style="display:flex;flex-direction:column;gap:12px">
+  const hartaTray = `<section class="tray">${trayH('Kondisi harta',`<button class="btn sm" data-act="valuesForm">${I('refresh','sm')} Update nilai</button>`,`Dompet tabungan + investasi · per ${fDate(TODAY)}`)}<div class="card pad" style="display:flex;flex-direction:column;gap:12px">
       <div><div class="m num" style="font-size:30px;font-weight:750;letter-spacing:-.03em">${rp(htot)}</div><div class="${p.unreal>=0?'pos':'neg'}" style="font-size:13.5px;margin-top:2px"><span class="m">${rp(p.unreal,{sign:true})}</span> (${pctS(p.unrealPct)}) investasi dari harga beli</div></div>
       <div class="comp" style="margin:0;height:10px">${hseg.map(x=>`<span style="flex:${x.v};background:${x.c}"></span>`).join('')}</div>
       <div class="alloc">${hseg.map(x=>`<div><i class="sw" style="background:${x.c}"></i><span>${esc(x.l)}</span><b class="m">${rpc(x.v)}</b><span class="mut" style="flex:none;width:42px;text-align:right">${idn(x.v/htot*100)}%</span></div>`).join('')}</div>
@@ -351,7 +351,7 @@ function vInvest(){
         <div><div class="k">Unrealized P/L</div><div class="v ${p.unreal>=0?'pos':'neg'}"><span class="m">${rp(p.unreal,{sign:true})}</span> <span style="font-size:13px">(${pctS(p.unrealPct)})</span></div></div>
         <div><div class="k">Realized P/L</div><div class="v ${p.realized>=0?'pos':'neg'}"><span class="m">${rp(p.realized,{sign:true})}</span></div></div>
       </div>
-      <p class="note" style="padding:0 18px 16px">Harga pasar diisi manual lewat tombol ⟳ di tiap aset (belum otomatis). Struktur datanya sudah siap disambungkan ke penyedia data pasar.</p>
+      <p class="note" style="padding:0 18px 16px">Nilai pasar diisi manual lewat tombol <b>Update nilai</b> di atas atau ⟳ di tiap aset (belum otomatis). Struktur datanya sudah siap disambungkan ke penyedia data pasar.</p>
     </div></section>
     <section class="tray">${trayH('Alokasi aset')}<div class="card donut-wrap"><div class="chart" data-chart="alloc"></div><div class="alloc">${types.map(t=>`<div><i class="sw" style="background:${INV_TYPES[t].color}"></i><span>${INV_TYPES[t].label}</span><b class="m">${rpc(p.byType[t])}</b><span class="mut" style="flex:none;width:44px;text-align:right">${idn(p.byType[t]/p.value*100)}%</span></div>`).join('')}</div></div></section>
   </div><div class="col">
@@ -370,7 +370,7 @@ function vInvDetail(id){
   const lots=inv.lots.slice().sort((a,b)=>a.date<b.date?1:-1);
   const isDep=inv.type==='deposit';
   return `<div class="cols"><div class="col">
-    <section class="tray">${trayH('Ringkasan',`<div class="seg"><button class="${!ret?'on':''}" data-act="invMode" data-k="value">Nilai</button><button class="${ret?'on':''}" data-act="invMode" data-k="return">Return</button></div>${isDep?'':`<button class="ibtn" data-act="priceForm" data-id="${id}" aria-label="Perbarui harga">${I('refresh','sm')}</button>`}`)}<div class="card">
+    <section class="tray">${trayH('Ringkasan',`<div class="seg"><button class="${!ret?'on':''}" data-act="invMode" data-k="value">Nilai</button><button class="${ret?'on':''}" data-act="invMode" data-k="return">Return</button></div>${isDep?'':`<button class="ibtn" data-act="priceForm" data-id="${id}" aria-label="Update nilai">${I('refresh','sm')}</button>`}`)}<div class="card">
       <div class="ovw"><div class="head"><span class="tile" style="width:60px;height:60px;border-radius:18px;font-size:28px">${inv.icon}</span><div style="min-width:0"><div class="v">${ret?`<span class="${h.unreal>=0?'pos':'neg'}">${M(h.unreal,{sign:true})}</span>`:M(h.value)}</div><div class="mut" style="font-size:14px">${INV_TYPES[inv.type].label} • ${inv.priceUpdated?'Harga per '+fDate(dISO(new Date(inv.priceUpdated))):'Harga = harga beli terakhir'}</div></div></div>
       <div class="chart" data-chart="inv" style="margin-top:14px"></div></div>
       <div class="sgrid">
