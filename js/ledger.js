@@ -82,7 +82,7 @@ function inRange(t,m,uptoDay){ if(monthOf(t.date)!==m) return false; return !upt
    - dari budget  : dibayar dari dompet berperan "budget" (default)
    - luar budget  : dibayar dari dompet "tabungan / dana darurat" (harta), atau ditandai didanai dari jual aset.
    Total pengeluaran = keduanya. Perbandingan dengan budget hanya memakai yang "dari budget". */
-const fundSource = t => t.fundedFrom ? 'asset' : ((W(t.wallet).role||'budget')!=='budget' ? 'savings' : 'budget'); // tabungan & transit = luar budget
+const fundSource = t => t.fundedFrom ? 'asset' : (t.offBudget || (W(t.wallet).role||'budget')!=='budget') ? 'savings' : 'budget'; // ditandai luar budget, atau dompet tabungan/transit
 const offBudget = t => t.type==='expense' && fundSource(t)!=='budget';
 function flows(m,uptoDay){
   let income=0, expense=0, budgetExp=0, savingsExp=0, assetExp=0; const byCat={}, byInc={}, byWallet={}, byGroup={}, byCatB={}, byGroupB={};

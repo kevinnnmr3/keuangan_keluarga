@@ -129,15 +129,19 @@ const walletChips = (name, sel, exclude, txId) => { const b=availBalances(txId);
 function txHint(){
   const f=document.querySelector('.sheet [data-form=tx]'); const box=document.getElementById('tx-hint'); if(!f||!box) return;
   const fd=formData(f), amt=parseAmt(fd.amount), b=availBalances(fd.id||null); const lines=[];
+  if(fd.type==='expense'){ const forced = fd.wallet && (W(fd.wallet).role||'budget')!=='budget'; const off = forced || fd.fund==='off';
+    const fo=document.getElementById('fund-off'), ff=document.getElementById('fund-forced'), seg=f.querySelector('[data-radio-seg=fund]'), tf=document.getElementById('fund-tf');
+    if(fo) fo.hidden=!off; if(ff) ff.hidden=!forced; if(seg) seg.style.display=forced?'none':''; if(tf) tf.hidden=forced; fd.fund = off?'off':'budget'; fd._tf = !forced && off && fd.autoTf; }
   const line=(lbl,before,after)=>`<div style="display:flex;justify-content:space-between;gap:10px"><span>${lbl}</span><span class="m num">${rp(before)} → <b class="${after<0?'neg':''}">${rp(after)}</b></span></div>`;
+  if(fd._tf && fd.tfFrom && W(fd.tfFrom)){ const cur=b[fd.tfFrom]||0; lines.push(line('Saldo '+esc(W(fd.tfFrom).short)+' (transfer)',cur,cur-amt)); b[fd.wallet]=(b[fd.wallet]||0)+amt; }
   if(fd.wallet && W(fd.wallet)){ const w=W(fd.wallet), cur=b[fd.wallet]||0;
     if(fd.type==='income') lines.push(line('Saldo '+esc(w.short),cur,cur+amt));
     else { lines.push(line('Saldo '+esc(w.short),cur,cur-amt)); if(amt>cur) lines.push(`<span class="neg" style="font-size:12.5px">Melebihi saldo ${esc(w.short)} ${rp(amt-cur)} — cek lagi dompetnya.</span>`); } }
   if(fd.type==='transfer' && fd.to && W(fd.to)){ const cur=b[fd.to]||0; lines.push(line('Saldo '+esc(W(fd.to).short),cur,cur+amt)); }
-  if(fd.type==='expense' && fd.cat && fd.wallet && (W(fd.wallet).role||'budget')==='budget'){ const m=monthOf(fd.date||TODAY), bud=budgetFor(m); const cb=bud.cats[fd.cat]||0;
+  if(fd.type==='expense' && fd.cat && fd.wallet && fd.fund!=='off'){ const m=monthOf(fd.date||TODAY), bud=budgetFor(m); const cb=bud.cats[fd.cat]||0;
     if(cb){ const old=fd.id&&S.txns.find(x=>x.id===fd.id); let used=flows(m).byCatB[fd.cat]||0; if(old && old.cat===fd.cat && monthOf(old.date)===m && fundSource(old)==='budget') used-=old.amount;
       lines.push(line('Sisa budget '+esc(cat(fd.cat).label)+' '+fMon(m),cb-used,cb-used-amt)); } }
-  if(fd.type==='expense' && fd.wallet && (W(fd.wallet).role||'budget')!=='budget') lines.push('<span class="mut" style="font-size:12.5px">Dibayar dari dompet luar budget — tidak memotong budget.</span>');
+  if(fd.type==='expense' && fd.fund==='off') lines.push('<span class="mut" style="font-size:12.5px">Luar budget — masuk total pengeluaran, tidak memotong budget.</span>');
   box.hidden=!lines.length; box.innerHTML=`<div style="display:flex;flex-direction:column;gap:4px;width:100%;font-size:13.5px">${lines.join('')}</div>`;
 }
 const amountField = (v,af=true) => `<div class="amount-in"><span>Rp</span><input name="amount" inputmode="numeric" placeholder="0" value="${v?idn(v):''}" data-money ${af?'autofocus':''} aria-label="Jumlah"></div><div class="quick">${[10000,25000,50000,100000,500000].map(q=>`<button type="button" data-act="qamt" data-v="${q}">+${rpc(q).replace('Rp ','')}</button>`).join('')}</div>`;
@@ -150,7 +154,7 @@ function needWallet(){ if(S.wallets.some(w=>!w.archived)) return false; toast('T
 function sheetAdd(pre={}){
   if(needWallet()) return;
   const t = pre.id ? S.txns.find(x=>x.id===pre.id) : null;
-  const d = Object.assign({ type:'expense', amount:0, cat:null, wallet:defWallet(), to:null, date:TODAY, note:'', owner:S.user, fundedFrom:'', debt:'' }, t||{}, pre);
+  const d = Object.assign({ type:'expense', amount:0, cat:null, wallet:defWallet(), to:null, date:TODAY, note:'', owner:S.user, fundedFrom:'', debt:'', offBudget:false }, t||{}, pre);
   if(!['expense','income','transfer'].includes(d.type)) d.type='expense';
   if(!d.wallet || !S.wallets.find(w=>w.id===d.wallet)) d.wallet=defWallet();
   if(d.type==='transfer' && (!d.to || d.to===d.wallet)) d.to = (S.wallets.find(w=>!w.archived && w.id!==d.wallet)||{}).id||'';
@@ -168,7 +172,14 @@ function sheetAdd(pre={}){
     <div class="frow"><div class="fld"><label for="tx-d">Tanggal</label><input class="inp" id="tx-d" type="date" name="date" value="${d.date}" min="${LEDGER_START}" max="${TODAY}"></div>
       <div class="fld"><label for="tx-o">Dicatat untuk</label><select class="inp" id="tx-o" name="owner">${memberOpts(d.owner||S.user)}</select></div></div>
     <div class="fld"><label for="tx-n">Catatan</label><input class="inp" id="tx-n" name="note" value="${esc(d.note)}" placeholder="mis. Superindo, bensin, gaji…" maxlength="80"></div>
-    ${d.type==='expense'?`<div class="fld"><label for="tx-f">Didanai dari penjualan aset? (opsional)</label><select class="inp" id="tx-f" name="fundedFrom"><option value="">Tidak — dari kas biasa</option>${sells.map(s=>`<option value="${s.id}" ${d.fundedFrom===s.id?'selected':''}>${esc(s.note)} · ${fDate(s.date)}</option>`).join('')}</select><span class="note">Hanya penanda analisis. Penjualan asetnya sendiri tidak dihitung sebagai pengeluaran atau pemasukan.</span></div>`:''}
+    ${d.type==='expense'?(()=>{ const off=d.offBudget||!!d.fundedFrom; const savW=S.wallets.filter(w=>!w.archived&&w.role==='savings'); return `<div class="fld"><span class="flbl">Sumber dana</span>
+      <div class="seg full" data-radio-seg="fund"><button type="button" class="${off?'':'on'}" data-act="segPick" data-k="budget">Budget bulanan</button><button type="button" class="${off?'on':''}" data-act="segPick" data-k="off">Luar budget</button></div><input type="hidden" name="fund" value="${off?'off':'budget'}">
+      <span class="note" id="fund-forced" hidden>Dompet ini di luar budget, jadi otomatis dihitung luar budget.</span></div>
+      <div class="card pad form" id="fund-off" ${off?'':'hidden'} style="gap:10px">
+        <div class="fld"><label for="tx-f">Uangnya dari</label><select class="inp" id="tx-f" name="fundedFrom"><option value="">Tabungan / dana darurat</option>${sells.map(s=>`<option value="${s.id}" ${d.fundedFrom===s.id?'selected':''}>Hasil jual: ${esc(s.note)} · ${fDate(s.date)}</option>`).join('')}</select></div>
+        ${!t&&savW.length?`<label id="fund-tf" style="display:flex;gap:10px;align-items:flex-start;cursor:pointer"><input type="checkbox" name="autoTf" value="1" style="width:20px;height:20px;margin-top:2px"><span class="note" style="margin:0">Sekalian catat <b>transfer</b> sebesar ini dari <select class="inp" name="tfFrom" style="display:inline-block;width:auto;height:34px;padding:0 8px;margin:2px 0">${savW.map(w=>`<option value="${w.id}">${esc(w.short)}</option>`).join('')}</select> ke dompet pembayar</span></label>`:''}
+        <span class="note">Tetap masuk total pengeluaran, tapi tidak memotong budget bulanan.</span>
+      </div>`; })():''}
     ${d.type==='expense'&&d.debt&&DEBT(d.debt)?`<div class="callout"><span>Tercatat sebagai pembayaran cicilan <b>${esc(DEBT(d.debt).name)}</b> — sisa utang ikut berkurang.</span></div>`:''}
     <button class="btn pri block" type="submit">${pre.draft?'Simpan & setujui draft':t?'Simpan perubahan':'Simpan transaksi'}</button>
     ${t?`<button type="button" class="btn danger block" data-act="txDelete" data-id="${t.id}">${I('trash','sm')} Hapus transaksi</button>`:''}
@@ -455,7 +466,7 @@ const ACT = {
   copy: async (d,el) => { try{ await navigator.clipboard.writeText(d.t); toast('Disalin'); }catch(e){ const r=document.createRange(); const n=el.parentElement.querySelector('.num'); if(n){ r.selectNodeContents(n); const s=getSelection(); s.removeAllRanges(); s.addRange(r); } toast('Tekan lama untuk menyalin', true); } },
   voiceAdd: () => { closeSheet(); UI.inboxTab='queue'; go('inbox'); voiceStart('sim'); },
   recurringForm: ()=>sheetRecurringForm(),
-  segPick: (d,el) => { const seg=el.parentElement; seg.querySelectorAll('button').forEach(b=>b.classList.toggle('on',b===el)); el.closest('form').querySelector(`[name=${seg.dataset.radioSeg}]`).value=d.k; },
+  segPick: (d,el) => { const seg=el.parentElement; seg.querySelectorAll('button').forEach(b=>b.classList.toggle('on',b===el)); el.closest('form').querySelector(`[name=${seg.dataset.radioSeg}]`).value=d.k; if(el.closest('[data-form=tx]')) txHint(); },
   toggleRecurring: d => { const r=S.recurring.find(x=>x.id===d.id); run(()=>DB.toggleRecurring(d.id,!r.active)); },
   postRecurring: d => { const r=S.recurring.find(x=>x.id===d.id); const date=CUR_MONTH+'-'+String(Math.min(r.day,TODAY_DAY)).padStart(2,'0');
     run(()=>DB.addTxn({ date, type:r.type, amount:r.amount, wallet:r.wallet, to:r.to, cat:r.cat, note:r.name, owner:r.owner||S.user, recurring:r.id }), r.name+' tercatat'); },
@@ -526,15 +537,21 @@ const FORMS = {
     }catch(e){ err.textContent=errMsg(e); btn.disabled=false; }
   },
   tx: (f,fd) => {
-    const o={ type:fd.type, amount:parseAmt(fd.amount), wallet:fd.wallet, to:fd.type==='transfer'?fd.to:null, cat:fd.type==='transfer'?null:fd.cat, date:fd.date, owner:fd.owner, fundedFrom:fd.fundedFrom||null };
+    const forcedOff = fd.type==='expense' && fd.wallet && (W(fd.wallet).role||'budget')!=='budget';
+    const off = fd.type==='expense' && (forcedOff || fd.fund==='off');
+    const o={ type:fd.type, amount:parseAmt(fd.amount), wallet:fd.wallet, to:fd.type==='transfer'?fd.to:null, cat:fd.type==='transfer'?null:fd.cat, date:fd.date, owner:fd.owner,
+      fundedFrom: off ? (fd.fundedFrom||null) : null, offBudget: off && !fd.fundedFrom };
     if(txValid(f,o)!==true) return;
-    if(o.type!=='income'){ const av=availBalances(fd.id||null)[o.wallet]||0;
+    const tf = off && !forcedOff && fd.autoTf && fd.tfFrom && fd.tfFrom!==o.wallet && !fd.id ? fd.tfFrom : null;
+    if(tf){ const av=availBalances()[tf]||0; if(o.amount>av) return formErr(f,`Saldo ${W(tf).short} tidak cukup untuk transfer: tersedia ${rp(av)}.`); if(o.date<W(tf).openingDate) return formErr(f,'Tanggal sebelum saldo awal '+W(tf).short+'.'); }
+    if(o.type!=='income' && !tf){ const av=availBalances(fd.id||null)[o.wallet]||0;
       if(o.amount>av){ if(o.type==='transfer') return formErr(f,`Saldo ${W(o.wallet).short} tidak cukup: tersedia ${rp(av)}.`);
         if(f.dataset.okOver!==String(o.amount)+o.wallet){ f.dataset.okOver=String(o.amount)+o.wallet; return formErr(f,`Saldo ${W(o.wallet).short} hanya ${rp(av)} — kurang ${rp(o.amount-av)}. Kalau memang benar (mis. tarik tunai belum dicatat), tekan Simpan sekali lagi.`); } } }
     o.debt = debtFor(o, fd.id ? S.txns.find(x=>x.id===fd.id) : null, fd.debt);
     o.note = fd.note.trim() || (o.type==='transfer'?'Transfer ke '+W(o.to).short:cat(o.cat,o.type).label);
     if(fd.draft) return approveDraft(fd.draft, o);
     if(fd.id){ const old=S.txns.find(x=>x.id===fd.id); return run(()=>DB.updateTxn(fd.id,{...o, source:old.source, recurring:old.recurring}),'Perubahan disimpan'); }
+    if(tf) return run(async()=>{ await DB.addTxn({ type:'transfer', amount:o.amount, wallet:tf, to:o.wallet, date:o.date, owner:o.owner, note:'Ambil dana: '+o.note }); await DB.addTxn(o); }, `Transfer dari ${W(tf).short} + pengeluaran ${rp(o.amount)} tercatat`);
     run(()=>DB.addTxn(o), `${TYPE_LABEL[o.type]} ${rp(o.amount)} tercatat`);
   },
   wallet: (f,fd) => { const name=fd.name.trim(); if(!name) return formErr(f,'Isi nama dompet.');

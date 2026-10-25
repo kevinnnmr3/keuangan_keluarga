@@ -56,7 +56,7 @@ function txSub(t){
   else parts.push(TYPE_LABEL[t.type]);
   return parts.join(' · ');
 }
-const fundTag = t => t.type!=='expense' ? '' : t.fundedFrom ? '<span class="tag warn">dari aset</span>' : (W(t.wallet).role||'budget')!=='budget' ? '<span class="tag warn">luar budget</span>' : '';
+const fundTag = t => t.type!=='expense' ? '' : t.fundedFrom ? '<span class="tag warn">dari aset</span>' : fundSource(t)!=='budget' ? '<span class="tag warn">luar budget</span>' : '';
 function txRow(t){
   return `<button class="row" data-act="tx" data-id="${t.id}">${txTile(t)}<div class="mid"><div class="t1">${esc(t.note||cat(t.cat,t.type).label)}</div><div class="t2">${av(t.owner)}<span>${txSub(t)}</span>${t.source==='telegram'?'<span class="tag tg">VN</span>':''}${fundTag(t)}${t.debt?'<span class="tag">cicilan</span>':''}</div></div>${amtChip(t)}</button>`;
 }
@@ -200,7 +200,7 @@ function trayWealth(series){
 }
 
 function fundSplit(f, compact){
-  const rows=[['var(--s1)','Dari budget bulanan',f.budgetExp,'Dompet berperan budget'],['var(--s4)','Dari dompet luar budget',f.savingsExp,S.wallets.filter(w=>(w.role||'budget')!=='budget'&&!w.archived).map(w=>w.short).join(', ')||'—'],['var(--s3)','Dari hasil jual aset',f.assetExp,'Ditandai saat mencatat']].filter((r,i)=>i===0||r[2]);
+  const rows=[['var(--s1)','Dari budget bulanan',f.budgetExp,'Dompet berperan budget'],['var(--s4)','Dari tabungan / dana darurat',f.savingsExp,'Dompet tabungan/transit, atau ditandai luar budget'],['var(--s3)','Dari hasil jual aset',f.assetExp,'Ditandai saat mencatat']].filter((r,i)=>i===0||r[2]);
   return `<div class="comp" style="margin:0;height:12px">${rows.map(r=>`<span style="flex:${Math.max(r[2],0)};background:${r[0]}"></span>`).join('')}</div>
     <div class="alloc">${rows.map(r=>`<div><i class="sw" style="background:${r[0]}"></i><span>${r[1]}${compact?'':`<small class="mut" style="display:block;font-size:12px">${esc(r[3])}</small>`}</span><b class="m">${rpc(r[2])}</b><span class="mut" style="flex:none;width:42px;text-align:right">${f.expense?idn(r[2]/f.expense*100):0}%</span></div>`).join('')}
     <div style="border-top:1px solid var(--line);padding-top:8px"><span style="flex:1"><b>Total pengeluaran</b></span><b class="m">${rpc(f.expense)}</b><span style="flex:none;width:42px"></span></div></div>`;
