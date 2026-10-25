@@ -90,6 +90,8 @@ const DB = {
   addTxn: async o => must(await sb.from('transactions').insert(toTxnRow(o)).select('id').single()),
   updateTxn: async (id,o) => must(await sb.from('transactions').update({ ...toTxnRow(o), updated_at:new Date().toISOString() }).eq('id',id)),
   deleteTxn: async id => must(await sb.from('transactions').delete().eq('id',id)),
+  deleteLot: async id => must(await sb.from('investment_lots').delete().eq('id',id)),  // transaksinya ikut terhapus (on delete cascade)
+  updateTxnWallet: async (id,wallet) => must(await sb.from('transactions').update({ wallet_id:wallet, updated_at:new Date().toISOString() }).eq('id',id)),
   addWallet: async w => must(await sb.from('wallets').insert({ name:w.name, short:w.short, type:w.type, brand:w.brand, owner_member_id:w.owner==='both'?null:w.owner,
     account_no:w.acct||null, opening_balance:w.opening||0, opening_date:w.openingDate, role:w.role||'budget', sort:S.wallets.length })),
   updateWallet: async (id,w) => must(await sb.from('wallets').update({ name:w.name, short:w.short, type:w.type, brand:w.brand, owner_member_id:w.owner==='both'?null:w.owner,

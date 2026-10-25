@@ -189,7 +189,7 @@ function sheetTx(id){
   openSheet(TYPE_LABEL[t.type], `<div class="card"><div class="ovw"><div class="head">${txTile(t)}<div style="min-width:0"><div class="v ${['income','inv_sell','recv_pay'].includes(t.type)?'pos':''}">${M(['expense','inv_buy','recv_out'].includes(t.type)?-t.amount:t.amount, {sign:t.type!=='transfer'})}</div><div class="mut">${esc(t.note)}</div></div></div></div>
     <div class="sgrid">${kv('Tanggal',fDate(t.date))}${t.type==='expense'?kv('Sumber dana',{budget:'Budget bulanan',savings:'Tabungan (luar budget)',asset:'Jual aset (luar budget)'}[fundSource(t)]):''}${kv('Dompet',t.type==='transfer'?esc(W(t.wallet).short)+' → '+esc(W(t.to).short):esc(W(t.wallet).name))}${t.cat?kv('Kategori',cat(t.cat,t.type).icon+' '+esc(cat(t.cat,t.type).label)):''}${kv('Oleh',av(t.owner)+' '+esc(MEMBERS[t.owner]?.name||'—'))}${kv('Sumber input',t.source==='telegram'?'<span class="tag tg">VN</span> disetujui':'Aplikasi')}${t.recurring?kv('Rutin','Ya — '+esc(S.recurring.find(r=>r.id===t.recurring)?.name||'')):''}</div></div>
     ${link?`<div class="card list">${link}</div>`:''}
-    ${editable?`<div class="btns"><button class="btn" data-act="txEdit" data-id="${t.id}">${I('edit','sm')} Ubah</button><button class="btn danger" data-act="txDelete" data-id="${t.id}">${I('trash','sm')} Hapus</button></div>`:'<p class="note">Transaksi aset & piutang diubah dari halamannya masing-masing agar saldo tetap konsisten.</p>'}`);
+    ${['inv_buy','inv_sell','recv_pay'].includes(t.type)?`<div class="btns"><button class="btn" data-act="txWallet" data-id="${t.id}">${I('card','sm')} Ganti dompet</button><button class="btn danger" data-act="assetTxDelete" data-id="${t.id}">${I('trash','sm')} Hapus</button></div>`:''}${editable?`<div class="btns"><button class="btn" data-act="txEdit" data-id="${t.id}">${I('edit','sm')} Ubah</button><button class="btn danger" data-act="txDelete" data-id="${t.id}">${I('trash','sm')} Hapus</button></div>`:'<p class="note">Transaksi aset & piutang diubah dari halamannya masing-masing agar saldo tetap konsisten.</p>'}`);
 }
 
 /* ---------- sheet: dompet ---------- */
@@ -427,6 +427,10 @@ const ACT = {
     if(!w.archived && Math.abs(b)>0){ confirmIn(`Arsipkan <b>${esc(w.name)}</b>? Saldonya masih <b>${rp(b)}</b> dan tetap dihitung di kekayaan. Sebaiknya transfer dulu ke dompet lain.`,'Tetap arsipkan',()=>run(()=>DB.archiveWallet(d.id,true),'Dompet diarsipkan'),()=>sheetWallet(d.id)); return; }
     run(()=>DB.archiveWallet(d.id,!w.archived), w.archived?'Dompet aktif lagi':'Dompet diarsipkan'); },
   invMode: d => { UI.invMode=d.k; renderView(true); }, invFilter: d => { UI.invFilter=d.k; renderView(true); },
+  txWallet: d => { const t=S.txns.find(x=>x.id===d.id); openSheet('Ganti dompet', `<form class="form" data-form="txWallet"><input type="hidden" name="id" value="${t.id}"><p class="note">${esc(t.note)} · <b class="m">${rp(t.amount)}</b></p><div class="fld"><span class="flbl">${['inv_buy'].includes(t.type)?'Dibayar dari · saldo tersedia':'Uang masuk ke'}</span>${walletChips('wallet',t.wallet,null,t.id)}</div><button class="btn pri block" type="submit">Simpan</button></form>`); },
+  assetTxDelete: d => { const t=S.txns.find(x=>x.id===d.id);
+    const what = t.type==='recv_pay' ? 'Pembayaran piutang ini dihapus; sisa piutang bertambah lagi.' : `Transaksi ${t.type==='inv_buy'?'pembelian':'penjualan'} ini dihapus beserta perubahan jumlah ${esc(INV(t.inv)?.name||'aset')}-nya. Saldo ${esc(W(t.wallet).short)} dihitung ulang.`;
+    confirmIn(`Hapus <b>${esc(t.note)}</b> (${rp(t.amount)})? ${what}`,'Hapus',()=>run(()=>t.lot?DB.deleteLot(t.lot):DB.deleteTxn(t.id),'Transaksi dihapus'),()=>sheetTx(d.id)); },
   trade: d => sheetTrade(d.id,d.side), tradeMode: d => sheetTrade(d.id,d.side,d.k), invForm: ()=>sheetInvForm(), priceForm: d => sheetPrice(d.id), valuesForm: ()=>sheetValues(),
   recv: d => sheetRecv(d.id), recvForm: ()=>sheetRecvForm(), recvPay: d => sheetRecvPay(d.id),
   debt: d => sheetDebt(d.id), debtForm: d => sheetDebtForm(d.id),
@@ -520,6 +524,9 @@ const FORMS = {
   tx: (f,fd) => {
     const o={ type:fd.type, amount:parseAmt(fd.amount), wallet:fd.wallet, to:fd.type==='transfer'?fd.to:null, cat:fd.type==='transfer'?null:fd.cat, date:fd.date, owner:fd.owner, fundedFrom:fd.fundedFrom||null };
     if(txValid(f,o)!==true) return;
+    if(o.type!=='income'){ const av=availBalances(fd.id||null)[o.wallet]||0;
+      if(o.amount>av){ if(o.type==='transfer') return formErr(f,`Saldo ${W(o.wallet).short} tidak cukup: tersedia ${rp(av)}.`);
+        if(f.dataset.okOver!==String(o.amount)+o.wallet){ f.dataset.okOver=String(o.amount)+o.wallet; return formErr(f,`Saldo ${W(o.wallet).short} hanya ${rp(av)} — kurang ${rp(o.amount-av)}. Kalau memang benar (mis. tarik tunai belum dicatat), tekan Simpan sekali lagi.`); } } }
     o.debt = debtFor(o, fd.id ? S.txns.find(x=>x.id===fd.id) : null, fd.debt);
     o.note = fd.note.trim() || (o.type==='transfer'?'Transfer ke '+W(o.to).short:cat(o.cat,o.type).label);
     if(fd.draft) return approveDraft(fd.draft, o);
@@ -543,6 +550,7 @@ const FORMS = {
     if(!fd.wallet) return formErr(f,'Pilih dompet.');
     const date=fd.date||TODAY; if(date<W(fd.wallet).openingDate) return formErr(f,'Tanggal sebelum saldo awal dompet.');
     const note=`${fd.side==='buy'?(dep?'Tambah':'Beli'):(dep?'Cairkan':'Jual')} ${inv.symbol||inv.name}${dep?'':' '+idn(qty,qty%1?4:0)+' '+inv.unit}`;
+    if(fd.side==='buy'){ const amt=Math.round(qty*price+fee), av=availBalances()[fd.wallet]||0; if(amt>av) return formErr(f,`Saldo ${W(fd.wallet).short} tidak cukup: tersedia ${rp(av)}, butuh ${rp(amt)}. Pilih dompet lain, atau catat dulu uang masuk / transfer ke dompet ini.`); }
     run(()=>DB.trade({ inv:inv.id, side:fd.side, date, qty, price, fee, wallet:fd.wallet, note }), fd.side==='buy'?'Pembelian tercatat':'Penjualan tercatat'); },
   inv: (f,fd) => { const qty=parseFloat(String(fd.qty).replace(',','.')), price=parseAmt(fd.price); if(!fd.name.trim()||!(qty>0)||!price) return formErr(f,'Isi nama, jumlah, dan harga beli.');
     const wallet = fd.src==='initial' ? null : fd.src;
@@ -550,11 +558,16 @@ const FORMS = {
     const icons={gold:'🥇',fund:'📊',stock:'📈',deposit:'🏦',other:'💎'};
     run(()=>DB.createInvestment({ type:fd.type, name:fd.name.trim(), symbol:fd.symbol.trim().toUpperCase(), unit:fd.unit.trim()||(fd.type==='gold'?'gram':fd.type==='stock'?'lembar':'unit'), icon:icons[fd.type],
       note:fd.note.trim(), qty, price, fee:parseAmt(fd.fee), date:fd.date, current:fd.type==='deposit'?null:(parseAmt(fd.cur)||price), wallet }),'Investasi ditambahkan'); },
+  txWallet: (f,fd) => { const t=S.txns.find(x=>x.id===fd.id); if(!fd.wallet) return formErr(f,'Pilih dompet.'); if(fd.wallet===t.wallet){ closeSheet(); return; }
+    if(t.date<W(fd.wallet).openingDate) return formErr(f,'Tanggal transaksi sebelum saldo awal dompet itu.');
+    if(t.type==='inv_buy'){ const av=availBalances(t.id)[fd.wallet]||0; if(t.amount>av) return formErr(f,`Saldo ${W(fd.wallet).short} tidak cukup (tersedia ${rp(av)}).`); }
+    run(()=>DB.updateTxnWallet(t.id, fd.wallet),'Dompet diganti'); },
   price: (f,fd) => { const h=holding(INV(fd.id)); const p = fd.src==='value' && h.qty ? parseAmt(fd.value)/h.qty : parseAmt(fd.amount); if(!p) return formErr(f,'Masukkan nilai.'); run(()=>DB.setPrice(fd.id,p),'Nilai diperbarui'); },
   values: (f,fd) => { const ch=S.investments.filter(i=>('v_'+i.id) in fd).map(i=>({i,h:holding(i),v:parseAmt(fd['v_'+i.id])})).filter(x=>x.v>0 && x.h.qty>0 && x.v!==Math.round(x.h.value));
     if(!ch.length){ closeSheet(); return toast('Tidak ada nilai yang berubah'); }
     run(()=>Promise.all(ch.map(x=>DB.setPrice(x.i.id, x.v/x.h.qty))), ch.length+' nilai investasi diperbarui'); },
-  recv: (f,fd) => { const amount=parseAmt(fd.amount); if(!fd.person.trim()||!amount) return formErr(f,'Isi nama dan jumlah.'); if(fd.due<fd.date) return formErr(f,'Jatuh tempo tidak boleh sebelum tanggal pinjam.'); if(!fd.wallet) return formErr(f,'Pilih dompet.');
+  recv: (f,fd) => { const amount=parseAmt(fd.amount); if(!fd.person.trim()||!amount) return formErr(f,'Isi nama dan jumlah.');
+    if(fd.wallet){ const av=availBalances()[fd.wallet]||0; if(amount>av) return formErr(f,`Saldo ${W(fd.wallet).short} tidak cukup (tersedia ${rp(av)}).`); } if(fd.due<fd.date) return formErr(f,'Jatuh tempo tidak boleh sebelum tanggal pinjam.'); if(!fd.wallet) return formErr(f,'Pilih dompet.');
     if(fd.date<W(fd.wallet).openingDate) return formErr(f,'Tanggal sebelum saldo awal dompet.');
     run(()=>DB.createReceivable({ person:fd.person.trim(), note:fd.note.trim(), amount, date:fd.date, due:fd.due, wallet:fd.wallet }),'Piutang dicatat'); },
   recvPay: (f,fd) => { const r=RECV(fd.id), i=recvInfo(r), amount=parseAmt(fd.amount); if(!amount) return formErr(f,'Masukkan jumlah.'); if(amount>i.out) return formErr(f,'Melebihi sisa piutang '+rp(i.out)+'.'); if(!fd.wallet) return formErr(f,'Pilih dompet.');
