@@ -224,17 +224,23 @@ function sheetWalletForm(id){
 }
 
 /* ---------- sheet: investasi ---------- */
-function sheetTrade(id, side){
+function sheetTrade(id, side, mode){
   const inv=INV(id), h=holding(inv), dep=inv.type==='deposit';
   if(needWallet()) return;
-  openSheet(`${side==='buy'?(dep?'Tambah':'Beli'):(dep?'Cairkan':'Jual')} · ${esc(inv.symbol||inv.name)}`, `<form class="form" data-form="trade"><input type="hidden" name="id" value="${id}"><input type="hidden" name="side" value="${side}">
+  mode = mode || UI.tradeMode || 'money'; UI.tradeMode = mode; const money = mode==='money';
+  const unitL = inv.type==='gold'?'gram':inv.unit==='unit'?'unit':esc(inv.unit);
+  openSheet(`${side==='buy'?(dep?'Tambah':'Beli'):(dep?'Cairkan':'Jual')} · ${esc(inv.symbol||inv.name)}`, `<form class="form" data-form="trade"><input type="hidden" name="mode" value="${mode}">
+    ${dep?'':`<div class="seg full"><button type="button" class="${money?'on':''}" data-act="tradeMode" data-id="${id}" data-side="${side}" data-k="money">Total uang (Rp)</button><button type="button" class="${!money?'on':''}" data-act="tradeMode" data-id="${id}" data-side="${side}" data-k="qty">Jumlah ${unitL}</button></div>`}<input type="hidden" name="id" value="${id}"><input type="hidden" name="side" value="${side}">
     ${dep?`<div class="fld"><span class="flbl">Jumlah</span><div class="amount-in"><span>Rp</span><input name="amount" inputmode="numeric" data-money value="${side==='sell'?idn(h.cost):''}" autofocus></div></div><div class="fld"><label for="tr-d">Tanggal</label><input class="inp" id="tr-d" type="date" name="date" value="${TODAY}" min="${LEDGER_START}" max="${TODAY}"></div>`
-      :`<div class="frow"><div class="fld"><label for="tr-q">Jumlah (${esc(inv.unit)})</label><input class="inp" id="tr-q" name="qty" inputmode="decimal" placeholder="0" autofocus data-calc></div><div class="fld"><label for="tr-p">Harga per ${esc(inv.unit)}</label><input class="inp" id="tr-p" name="price" inputmode="numeric" value="${idn(h.price)}" data-money data-calc></div></div>
+      :`${money?`<div class="fld"><span class="flbl">${side==='buy'?'Total uang dibelikan':'Total uang dari penjualan'}</span><div class="amount-in"><span>Rp</span><input name="total" inputmode="numeric" placeholder="0" data-money data-calc autofocus></div></div>
+         <div class="fld"><label for="tr-p">Harga per ${unitL} saat ${side==='buy'?'beli':'jual'}</label><input class="inp" id="tr-p" name="price" inputmode="numeric" value="${h.price?idn(Math.round(h.price)):''}" placeholder="lihat di aplikasi" data-money data-calc></div>`
+       :`<div class="frow"><div class="fld"><label for="tr-q">Jumlah (${unitL})</label><input class="inp" id="tr-q" name="qty" inputmode="decimal" placeholder="0" autofocus data-calc></div><div class="fld"><label for="tr-p">Harga per ${unitL}</label><input class="inp" id="tr-p" name="price" inputmode="numeric" value="${h.price?idn(Math.round(h.price)):''}" data-money data-calc></div></div>`}
        <div class="frow"><div class="fld"><label for="tr-f">Biaya / fee</label><input class="inp" id="tr-f" name="fee" inputmode="numeric" placeholder="0" data-money data-calc></div><div class="fld"><label for="tr-d">Tanggal</label><input class="inp" id="tr-d" type="date" name="date" value="${TODAY}" min="${LEDGER_START}" max="${TODAY}"></div></div>`}
-    <div class="fld"><span class="flbl">${side==='buy'?'Dibayar dari':'Uang masuk ke'}</span>${walletChips('wallet',defWallet())}</div>
+    <div class="fld"><span class="flbl">${side==='buy'?'Dibayar dari · saldo tersedia':'Uang masuk ke'}</span>${walletChips('wallet',(S.txns.slice().reverse().find(t=>t.inv===id&&W(t.wallet)&&!W(t.wallet).archived)||{}).wallet||(S.wallets.find(w=>w.role==='savings'&&!w.archived)||{}).id||defWallet())}</div>
     <div class="callout"><span id="trade-sum">${side==='sell'&&!dep?`Kamu punya ${idn(h.qty,h.qty%1?4:0)} ${esc(inv.unit)} · rata-rata beli ${rp(h.avg)}`:'Isi jumlah untuk melihat total.'}</span></div>
     <p class="note">${side==='buy'?'Kas berkurang, aset bertambah — tidak masuk laporan pengeluaran.':'Aset berkurang, kas bertambah — selisih dengan modal dicatat sebagai realized P/L, bukan pemasukan.'}</p>
     <button class="btn pri block" type="submit">Simpan</button></form>`);
+  document.querySelectorAll('.sheet .wsel .on').forEach(el=>{ const w=el.parentElement; w.scrollLeft=Math.max(0, el.offsetLeft-w.offsetLeft-12); });
 }
 function sheetInvForm(){
   openSheet('Investasi baru', `<form class="form" data-form="inv">
@@ -421,7 +427,7 @@ const ACT = {
     if(!w.archived && Math.abs(b)>0){ confirmIn(`Arsipkan <b>${esc(w.name)}</b>? Saldonya masih <b>${rp(b)}</b> dan tetap dihitung di kekayaan. Sebaiknya transfer dulu ke dompet lain.`,'Tetap arsipkan',()=>run(()=>DB.archiveWallet(d.id,true),'Dompet diarsipkan'),()=>sheetWallet(d.id)); return; }
     run(()=>DB.archiveWallet(d.id,!w.archived), w.archived?'Dompet aktif lagi':'Dompet diarsipkan'); },
   invMode: d => { UI.invMode=d.k; renderView(true); }, invFilter: d => { UI.invFilter=d.k; renderView(true); },
-  trade: d => sheetTrade(d.id,d.side), invForm: ()=>sheetInvForm(), priceForm: d => sheetPrice(d.id), valuesForm: ()=>sheetValues(),
+  trade: d => sheetTrade(d.id,d.side), tradeMode: d => sheetTrade(d.id,d.side,d.k), invForm: ()=>sheetInvForm(), priceForm: d => sheetPrice(d.id), valuesForm: ()=>sheetValues(),
   recv: d => sheetRecv(d.id), recvForm: ()=>sheetRecvForm(), recvPay: d => sheetRecvPay(d.id),
   debt: d => sheetDebt(d.id), debtForm: d => sheetDebtForm(d.id),
   debtPay: d => { const x=DEBT(d.id), i=debtInfo(x); const lastW=i.pays.length?i.pays[i.pays.length-1].wallet:null;
@@ -530,7 +536,10 @@ const FORMS = {
     let qty, price, fee=parseAmt(fd.fee);
     if(dep){ const amt=parseAmt(fd.amount); if(!amt) return formErr(f,'Masukkan jumlah.'); if(fd.side==='sell' && amt>h.cost+0.5) return formErr(f,'Melebihi pokok deposito.');
       if(fd.side==='sell'){ qty=+(amt/h.cost*h.qty).toFixed(6); price=h.cost/h.qty; } else { qty=1; price=amt; } }
-    else { qty=parseFloat(String(fd.qty).replace(',','.')); price=parseAmt(fd.price); if(!(qty>0)||!price) return formErr(f,'Isi jumlah dan harga.'); if(fd.side==='sell' && qty>h.qty+1e-9) return formErr(f,`Maksimal ${idn(h.qty,h.qty%1?4:0)} ${inv.unit}.`); }
+    else { price=parseAmt(fd.price);
+      if(fd.mode==='money'){ const tot=parseAmt(fd.total); if(!tot) return formErr(f,'Isi total uang.'); if(!price) return formErr(f,'Isi harga per '+(inv.type==='gold'?'gram':inv.unit)+' supaya jumlahnya bisa dihitung.'); qty=+(tot/price).toFixed(6); }
+      else qty=parseFloat(String(fd.qty).replace(',','.'));
+      if(!(qty>0)||!price) return formErr(f,'Isi jumlah dan harga.'); if(fd.side==='sell' && qty>h.qty+1e-9) return formErr(f,`Maksimal ${idn(h.qty,h.qty%1?4:0)} ${inv.unit}.`); }
     if(!fd.wallet) return formErr(f,'Pilih dompet.');
     const date=fd.date||TODAY; if(date<W(fd.wallet).openingDate) return formErr(f,'Tanggal sebelum saldo awal dompet.');
     const note=`${fd.side==='buy'?(dep?'Tambah':'Beli'):(dep?'Cairkan':'Jual')} ${inv.symbol||inv.name}${dep?'':' '+idn(qty,qty%1?4:0)+' '+inv.unit}`;
@@ -620,8 +629,11 @@ document.addEventListener('input', e=>{
   if(t.closest('.sheet [data-form=tx]')) txHint();
   if(t.matches('[data-psync]')){ const f=t.closest('form'), q=Number(t.dataset.qty)||0, n=parseAmt(t.value); f.querySelector('[name=src]').value=t.dataset.psync;
     const other=f.querySelector(`[data-psync="${t.dataset.psync==='value'?'price':'value'}"]`); if(other && q) other.value=n?idn(Math.round(t.dataset.psync==='value'?n/q:n*q)):''; }
-  if(t.matches('[data-calc]')){ const f=t.closest('form'); const fd=formData(f); const inv=INV(fd.id); const h=holding(inv); const q=parseFloat(String(fd.qty).replace(',','.'))||0, p=parseAmt(fd.price), fee=parseAmt(fd.fee); const box=document.getElementById('trade-sum');
-    if(box && q){ const total=fd.side==='buy'?q*p+fee:q*p-fee; box.innerHTML = fd.side==='buy' ? `Total dibayar <b class="m">${rp(total)}</b>` : `Diterima <b class="m">${rp(total)}</b> · estimasi realized P/L <b class="${total-h.avg*q>=0?'pos':'neg'}">${rp(total-h.avg*q,{sign:true})}</b>`; } }
+  if(t.matches('[data-calc]')){ const f=t.closest('form'); const fd=formData(f); const inv=INV(fd.id); const h=holding(inv); const p=parseAmt(fd.price), fee=parseAmt(fd.fee); const money=fd.mode==='money'; const q = money ? (p?parseAmt(fd.total)/p:0) : (parseFloat(String(fd.qty).replace(',','.'))||0); const box=document.getElementById('trade-sum');
+    const ul = inv.type==='gold'?'gram':inv.unit; const qs = money&&q ? `≈ <b class="m">${idn(q,4)} ${esc(ul)}</b> · ` : '';
+    if(box && q){ const total=fd.side==='buy'?q*p+fee:q*p-fee; const over = fd.side==='sell' && q>h.qty+1e-9 ? ` · <b class="neg">melebihi yang dimiliki (${idn(h.qty,4)} ${esc(ul)})</b>` : '';
+      box.innerHTML = qs + (fd.side==='buy' ? `Total dibayar <b class="m">${rp(total)}</b>` : `Diterima <b class="m">${rp(total)}</b> · estimasi realized P/L <b class="${total-h.avg*q>=0?'pos':'neg'}">${rp(total-h.avg*q,{sign:true})}</b>`) + over; }
+    else if(box && money) box.innerHTML = p ? 'Isi total uang untuk melihat jumlah '+esc(ul)+'.' : 'Isi harga per '+esc(ul)+' (lihat di aplikasi) supaya jumlahnya bisa dihitung.'; }
   if(t.matches('[data-filter=q]')){ UI.hf.q=t.value; clearTimeout(t._d); t._d=setTimeout(()=>{ const pos=t.selectionStart; renderView(true); const ni=document.querySelector('[data-filter=q]'); if(ni){ ni.focus(); ni.setSelectionRange(pos,pos);} },220); }
 });
 document.addEventListener('change', e=>{
