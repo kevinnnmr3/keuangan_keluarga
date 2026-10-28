@@ -5,7 +5,7 @@
 const pref = (k,d) => { try{ const v=localStorage.getItem('kk-'+k); return v===null?d:v; }catch(e){ return d; } };
 const setPref = (k,v) => { try{ localStorage.setItem('kk-'+k,v); }catch(e){} };
 const UI = {
-  view:'home', param:null, flowRange:3, catMode:'same', invFilter:'all', invMode:'value', budgetMonth:CUR_MONTH,
+  view:'home', param:null, calMonth:CUR_MONTH, flowRange:3, catMode:'same', invFilter:'all', invMode:'value', budgetMonth:CUR_MONTH,
   collapsed:{}, histSort:{k:'date',dir:-1}, inboxTab:'queue', simAs:null, simText:'', authMode:'login', busy:false,
   theme: pref('theme','system'), masked: pref('masked','0')==='1',
   hf:{type:'all',period:'month',cat:'all',wallet:'all',owner:'all',q:''},
@@ -387,6 +387,7 @@ function sheetCatForm(o={}){
     ${!c && !parent && !o.back?`<div class="seg full">${[['expense','Pengeluaran'],['income','Pemasukan']].map(x=>`<button type="button" class="${kind===x[0]?'on':''}" data-act="catFormKind" data-k="${x[0]}">${x[1]}</button>`).join('')}</div>`:''}
     <div class="fld"><label for="c-p">Letak</label><select class="inp" id="c-p" name="parent" ${hasKids?'disabled':''}><option value="">Kategori utama (grup sendiri)</option>${groups.map(g=>`<option value="${g.id}" ${parent===g.id?'selected':''}>Sub dari: ${g.icon} ${esc(g.label)}</option>`).join('')}</select>${hasKids?'<span class="note">Kategori ini punya sub-kategori, jadi tetap sebagai kategori utama.</span>':''}</div>
     <div class="frow" style="grid-template-columns:90px 1fr"><div class="fld"><label for="c-i">Ikon</label><input class="inp" id="c-i" name="icon" value="${esc(c?c.icon:(pg?pg.icon:'🏷️'))}" maxlength="4" style="text-align:center;font-size:22px"></div><div class="fld"><label for="c-n">Nama</label><input class="inp" id="c-n" name="label" value="${esc(c?c.label:'')}" required maxlength="32" autofocus placeholder="${parent?'mis. Bensin, Listrik':'mis. Pendidikan'}"></div></div>
+    ${kind==='expense' && !parent?`<div class="fld"><label for="c-k">Jenis (untuk kartu Progres)</label><select class="inp" id="c-k" name="bucket">${Object.entries(BUCKETS).map(([k,l])=>`<option value="${k}" ${(c?bucketOfGroup(c):'want')===k?'selected':''}>${l}</option>`).join('')}</select><span class="note">Sub-kategori di dalamnya ikut jenis ini.</span></div>`:''}
     ${kind==='expense' && !hasKids?`<div class="fld"><label for="c-b">Budget default per bulan (opsional)</label><input class="inp" id="c-b" name="budget" inputmode="numeric" data-money placeholder="— tanpa budget" value="${c&&c.budget?idn(c.budget):''}"><span class="note">Kosongkan kalau insidental / tidak perlu dibatasi.</span></div>`:''}
     <button class="btn pri block" type="submit">Simpan</button>
     ${c?`<button type="button" class="btn block" data-act="catArchive" data-id="${c.id}">${I('archive','sm')} ${c.archived?'Aktifkan lagi':'Arsipkan (sembunyikan dari pilihan)'}</button>${!used && !hasKids?`<button type="button" class="btn danger block" data-act="catDelete" data-id="${c.id}">${I('trash','sm')} Hapus</button>`:`<p class="note">${used?`Dipakai di ${used} transaksi/aturan — tidak bisa dihapus agar riwayat tetap utuh; arsipkan saja.`:'Hapus sub-kategorinya dulu untuk menghapus grup ini.'}</p>`}`:''}
@@ -453,6 +454,12 @@ const ACT = {
     sheetAdd({ type:'expense', amount:Math.min(x.installment||i.out,i.out), cat:x.cat, wallet:lastW&&!W(lastW).archived?lastW:defWallet(), note:(/^cicil/i.test(x.name)?x.name:'Cicilan '+x.name)+(x.tenor&&i.n!=null?' ('+(i.n+1)+'/'+x.tenor+')':''), debt:x.id }); },
   debtArchive: d => { const x=DEBT(d.id); run(()=>DB.archiveDebt(d.id,!x.archived), x.archived?'Diaktifkan lagi':'Diarsipkan'); },
   debtDelete: d => { const x=DEBT(d.id); confirmIn(`Hapus <b>${esc(x.name)}</b>? Liabilitasnya hilang dari kekayaan bersih.`,'Hapus',()=>run(()=>DB.deleteDebt(d.id),'Dihapus'),()=>sheetDebt(d.id)); },
+  calMonth: d => { const ms=ledgerMonths(); const cur=ms.includes(UI.calMonth)?UI.calMonth:CUR_MONTH; const i=ms.indexOf(cur)+Number(d.d); if(ms[i]){ UI.calMonth=ms[i]; renderView(true); } },
+  calDay: d => { const list=S.txns.filter(t=>t.date===d.d); const out=list.filter(t=>t.type==='expense').reduce((s,t)=>s+t.amount,0), inc=list.filter(t=>t.type==='income').reduce((s,t)=>s+t.amount,0);
+    openSheet(fDay(d.d)+' '+d.d.slice(0,4), `<div class="stats"><div class="stat"><span class="k">Keluar</span><span class="v ${out?'neg':''}">${MC(out)}</span></div><div class="stat"><span class="k">Masuk</span><span class="v ${inc?'pos':''}">${MC(inc)}</span></div></div>
+      <div class="card list" style="overflow:hidden">${list.length?list.slice().reverse().map(txRow).join(''):'<div class="empty">Tidak ada transaksi di tanggal ini.</div>'}</div>
+      ${d.d<=TODAY&&d.d>=LEDGER_START?`<button class="btn block" data-act="addOn" data-d="${d.d}">${I('plus','sm')} Catat transaksi di tanggal ini</button>`:''}`); },
+  addOn: d => sheetAdd({ date:d.d }),
   bMonth: d => { const ms=ledgerMonths(); const i=ms.indexOf(UI.budgetMonth)+Number(d.d); if(ms[i]){ UI.budgetMonth=ms[i]; renderView(true); } },
   budgetForm: ()=>sheetBudget(), budgetMonthGo: d => { UI.budgetMonth=d.m; go('budget'); }, budgetClear: ()=>run(()=>DB.clearBudgetMonth(UI.budgetMonth),'Kembali ke budget berulang'),
   goal: d => sheetGoal(d.id), goalForm: ()=>sheetGoalForm(),
@@ -615,7 +622,7 @@ const FORMS = {
   cat: async (f,fd) => { const label=fd.label.trim(); if(!label) return formErr(f,'Isi nama kategori.');
     const kind=fd.ctype; const parent=fd.parent||null; const pg=parent?cat(parent):null;
     if(catList(kind).some(c=>c.id!==fd.id && !c.archived && (c.parent||null)===parent && c.label.toLowerCase()===label.toLowerCase())) return formErr(f,'Nama ini sudah ada di tempat yang sama.');
-    const data={ kind, label, icon:(fd.icon||'').trim()||(pg?pg.icon:'🏷️'), budget:kind==='expense'?parseAmt(fd.budget):0, parent, tint:pg?pg.tint:undefined, sort:parent?kidsOf(parent,kind,true).length+1:groupCats(kind,true).length+1 };
+    const data={ kind, label, icon:(fd.icon||'').trim()||(pg?pg.icon:'🏷️'), budget:kind==='expense'?parseAmt(fd.budget):0, parent, tint:pg?pg.tint:undefined, sort:parent?kidsOf(parent,kind,true).length+1:groupCats(kind,true).length+1, bucket: fd.bucket!==undefined ? (fd.bucket||null) : undefined };
     if(fd.id){ const c=cat(fd.id); if(catList(kind).some(x=>x.parent===c.id)) data.parent=null; return run(()=>DB.updateCategory(fd.id,data),'Kategori diperbarui'); }
     let newId=null; const ok = await run(async()=>{ const r=await DB.addCategory(data); newId=r&&r.id; }, parent?'Sub-kategori ditambahkan':'Kategori ditambahkan');
     if(ok && fd.back==='add'){ const dr=UI.txDraft||{}; UI.txDraft=null; sheetAdd({ type:kind==='income'?'income':'expense', amount:parseAmt(dr.amount), date:dr.date, note:dr.note, owner:dr.owner, wallet:dr.wallet, cat:newId }); } },

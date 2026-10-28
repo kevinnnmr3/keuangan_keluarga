@@ -443,3 +443,33 @@ table.tbl{width:100%;border-collapse:collapse;font-size:13.5px;font-variant-nume
 }
 @media (max-width:979px){.desk-only{display:none!important}}
 @media (max-width:380px){.shortcuts .sc{font-size:10.5px}.catgrid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+
+/* ===== Progres bulan ini ===== */
+.pg{display:flex;flex-direction:column;gap:16px}
+.pg-top{display:flex;align-items:center;gap:16px;position:relative}
+.pg-ring{width:84px;height:84px;flex:none}
+.pg-rl{position:absolute;left:0;top:0;width:84px;height:84px;display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1}
+.pg-rl small{font-size:10.5px;color:var(--ink3);font-weight:700;letter-spacing:.06em}
+.pg-rl b{font-size:24px;font-weight:750;margin-top:3px}
+.pg-row{display:flex;flex-direction:column;gap:6px}
+.pg-h{display:flex;align-items:baseline;gap:10px;min-width:0}
+.pg-h b{font-size:12.5px;letter-spacing:.08em;color:var(--ink2);flex:none}
+.pg-h span{font-size:12.5px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pg-h .pg-p{margin-left:auto;font-weight:750;font-size:14px;color:var(--ink);flex:none}
+.pg-h .pos{color:var(--pos)} .pg-h .neg{color:var(--neg)} .pg-h .warn{color:var(--warn)}
+.pg .bar{overflow:visible}
+.pg-day{position:absolute;top:-3px;bottom:-3px;width:2px;border-radius:1px;background:var(--ink2);opacity:.55}
+.pg-s{font-size:12px}
+/* ===== Kalender aktivitas ===== */
+.cal{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:5px}
+.cal-w{font-size:11px;font-weight:700;color:var(--ink3);text-align:center;letter-spacing:.04em;padding-bottom:2px}
+.cal-c{position:relative;min-height:54px;border-radius:12px;border:0;padding:5px 2px 4px;display:flex;flex-direction:column;align-items:center;justify-content:space-between;
+  background:color-mix(in srgb, var(--neg) calc(var(--h,0) * 22%), var(--chip));color:var(--ink);font:inherit;cursor:pointer;min-width:0;overflow:hidden}
+.cal-c.empty{background:transparent;cursor:default}
+.cal-c.fut{opacity:.45}
+.cal-c.today{box-shadow:inset 0 0 0 2px var(--ink)}
+.cal-d{align-self:flex-start;padding-left:3px;font-size:12px;font-weight:700;color:var(--ink2)}
+.cal-o,.cal-i{font-size:10px;font-weight:750;font-variant-numeric:tabular-nums;line-height:1.15;white-space:nowrap;letter-spacing:-.02em;max-width:100%}
+.cal-o{color:var(--neg)} .cal-i{color:var(--pos)}
+.cal-f{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;font-size:12.5px;margin-top:12px}
+@media (max-width:380px){ .cal-c{min-height:48px;padding:4px 1px} .cal-o,.cal-i{font-size:9px} }

@@ -98,6 +98,21 @@ function flows(m,uptoDay){
   return { income, expense, net:income-expense, byCat, byInc, byWallet, byGroup, byCatB, byGroupB,
     budgetExp, offExp:savingsExp+assetExp, savingsExp, assetExp, fromAsset:assetExp };
 }
+/* ---------- kebutuhan / keinginan / tabungan (per grup kategori) ---------- */
+const BUCKETS = { need:'Kebutuhan', want:'Keinginan', save:'Tabungan' };
+const BUCKET_BY_CODE = { g_tinggal:'need', g_rt:'need', g_nafkah:'need', g_transport:'need', g_sehat:'need', g_cicilan:'need', g_darurat:'need', g_anak:'need',
+  g_makan:'want', g_personal:'want', g_rawat:'want', g_lain:'want' };
+function bucketOfGroup(g){ if(!g) return 'want'; return g.bucket || BUCKET_BY_CODE[g.code] || (/tabung|invest|nabung/i.test(g.label)?'save':'want'); }
+const bucketOf = catId => bucketOfGroup(groupOf(catId));
+/* Ringkasan per jenis untuk bulan m: terpakai (hanya yang dari budget) vs budget. Tabungan = sisa pemasukan + pos tabungan. */
+function bucketSummary(m, uptoDay){
+  const f=flows(m, uptoDay), bud=budgetFor(m); const out={ need:{used:0,budget:0}, want:{used:0,budget:0}, save:{used:0,budget:0} };
+  Object.entries(f.byCatB).forEach(([id,v])=>{ out[bucketOf(id)].used+=v; });
+  Object.entries(bud.cats).forEach(([id,v])=>{ if(v) out[bucketOf(id)].budget+=v; });
+  const saveExp = Object.entries(f.byCat).filter(([id])=>bucketOf(id)==='save').reduce((s,[,v])=>s+v,0);
+  const saved = f.income - f.expense + saveExp;   // pemasukan yang tidak dibelanjakan + yang disetor ke pos tabungan
+  return { ...out, income:f.income, saved, saveExp, rate: f.income ? saved/f.income*100 : 0 };
+}
 const isPartial = m => m===CUR_MONTH;
 const monthLabel = m => isPartial(m) ? fMon(m)+' (1–'+TODAY_DAY+')' : fMon(m);
 

@@ -111,6 +111,8 @@ function vHome(){
       <button class="stat" data-act="go" data-v="budget"><span class="k"><span class="k-ico" style="background:var(--chip)">${I('gauge','xs')}</span>Sisa budget</span>${bud.any?`<span class="v ${remain<0?'neg':''}">${MC(remain)}</span><span class="d mut">terpakai ${idn(usedP)}% · hari ${TODAY_DAY}/${daysIn(CUR_MONTH)}</span>`:`<span class="v mut" style="font-size:16px">Belum diatur</span><span class="d mut">opsional · ketuk untuk atur</span>`}</button>
       <button class="stat" data-act="go" data-v="invest"><span class="k"><span class="k-ico" style="background:var(--chip)">${I('trend','xs')}</span>P/L investasi</span><span class="v ${port.unreal>=0?'pos':'neg'}">${MC(port.unreal,{sign:true})}</span><span class="d mut">${pctS(port.unrealPct)} belum terealisasi</span></button>
     </div>
+    ${trayProgress()}
+    ${trayCalendar()}
     ${trayCashflow()}
     ${trayCategories()}
   </div><div class="col">
@@ -119,6 +121,49 @@ function vHome(){
     ${trayFunding()}
     <section class="tray">${trayH('Transaksi terbaru',`<button class="ibtn" data-act="go" data-v="history" aria-label="Lihat semua">${I('fwd','sm')}</button>`)}<div class="card list">${S.txns.slice().sort((a,b)=>a.date<b.date?1:a.date>b.date?-1:(a.created<b.created?1:-1)).slice(0,6).map(txRow).join('')||'<div class="empty">Belum ada transaksi. Tekan + untuk mencatat.</div>'}</div></section>
   </div></div>`;
+}
+
+/* ----- Progres bulan ini: hari ke-berapa + kebutuhan / keinginan / tabungan ----- */
+function trayProgress(){
+  const m=CUR_MONTH, dim=daysIn(m), day=TODAY_DAY, dayP=day/dim*100, x=bucketSummary(m);
+  const R=34, C=2*Math.PI*R;
+  const row=(k)=>{ const b=x[k]; const p=b.budget?b.used/b.budget*100:0;
+    let st, cls;
+    if(!b.budget){ st=b.used?`${rpc(b.used)} · tanpa budget`:'Belum ada'; cls='mut'; }
+    else if(p>100){ st=`Lewat ${rpc(b.used-b.budget)}`; cls='neg'; }
+    else if(p>=90){ st=`Hampir habis · sisa ${rpc(b.budget-b.used)}`; cls='warn'; }
+    else if(k==='want' && p>dayP+15){ st=`Lebih cepat dari jadwal`; cls='warn'; }
+    else { st=`Masih aman · sisa ${rpc(b.budget-b.used)}`; cls='pos'; }
+    return `<div class="pg-row"><div class="pg-h"><b>${BUCKETS[k].toUpperCase()}</b><span class="${cls}">${st}</span><span class="m num pg-p">${b.budget?idn(p)+'%':'—'}</span></div><div class="bar"><i class="${p>100?'over':p>=90||(k==='want'&&p>dayP+15)?'warn':'ok'}" style="width:${Math.min(p,100)}%"></i><span class="pg-day" style="left:${dayP}%"></span></div><div class="pg-s mut"><span class="m">${rpc(b.used)}</span> dari <span class="m">${b.budget?rpc(b.budget):'—'}</span></div></div>`; };
+  const sr=x.rate, sCls = !x.income?'mut':sr>=20?'pos':sr>=10?'warn':'neg';
+  const sSt = !x.income ? 'Belum ada pemasukan bulan ini' : sr>=20 ? 'Bagus — di atas 20%' : sr>=10 ? 'Lumayan — target 20%' : sr>0 ? 'Masih tipis — target 20%' : 'Pengeluaran melebihi pemasukan';
+  const saveRow = `<div class="pg-row"><div class="pg-h"><b>TABUNGAN</b><span class="${sCls}">${sSt}</span><span class="m num pg-p">${x.income?idn(Math.max(sr,0))+'%':'—'}</span></div><div class="bar"><i class="${sCls==='pos'?'ok':sCls==='neg'?'over':'warn'}" style="width:${Math.max(0,Math.min(sr,100))}%"></i><span class="pg-day" style="left:20%" title="target 20%"></span></div><div class="pg-s mut">Disisihkan <span class="m">${rpc(Math.max(x.saved,0))}</span> dari pemasukan <span class="m">${rpc(x.income)}</span>${x.saveExp?` · termasuk pos tabungan ${rpc(x.saveExp)}`:''}</div></div>`;
+  return `<section class="tray">${trayH('Progres bulan ini','',`Garis tipis = posisi hari ini (${idn(dayP)}% bulan berjalan)`)}<div class="card pad pg">
+    <div class="pg-top"><svg viewBox="0 0 84 84" class="pg-ring" aria-hidden="true"><circle cx="42" cy="42" r="${R}" fill="none" stroke="var(--chip2)" stroke-width="8"/><circle cx="42" cy="42" r="${R}" fill="none" stroke="var(--ink)" stroke-width="8" stroke-linecap="round" stroke-dasharray="${C*dayP/100} ${C}" transform="rotate(-90 42 42)"/></svg>
+      <div class="pg-rl"><small>HARI</small><b class="m">${day}</b></div>
+      <div><div style="font-size:17px;font-weight:720">${fMonth(m)}</div><div class="mut" style="font-size:13.5px">Hari ${day} dari ${dim} · sisa ${dim-day} hari</div></div></div>
+    ${row('need')}${row('want')}${saveRow}
+    <p class="note">Kebutuhan & keinginan hanya menghitung pengeluaran dari budget. Jenis tiap grup kategori bisa diubah di Pengaturan → Kategori.</p>
+  </div></section>`;
+}
+
+/* ----- Aktivitas bulan ini: kalender arus kas harian ----- */
+function trayCalendar(){
+  const ms=ledgerMonths(); const m = ms.includes(UI.calMonth) ? UI.calMonth : CUR_MONTH; const i0=ms.indexOf(m);
+  const dim=daysIn(m), first=dParse(m+'-01').getDay(), lead=(first+6)%7; // Senin = kolom pertama
+  const day={}; S.txns.forEach(t=>{ if(monthOf(t.date)!==m) return; if(t.type!=='expense'&&t.type!=='income') return; const d=day[t.date]=day[t.date]||{out:0,in:0}; if(t.type==='expense') d.out+=t.amount; else d.in+=t.amount; });
+  const outs=Object.values(day).map(d=>d.out).filter(Boolean).sort((a,b)=>a-b); const p90=outs.length?outs[Math.min(outs.length-1,Math.floor(outs.length*0.9))]:1;
+  const k=v=>{ const a=Math.abs(v); const f=(x,dp)=>x.toFixed(dp).replace(/\.0$/,'').replace('.',','); return a>=1e6?f(a/1e6,a>=1e7?0:1)+'jt':a>=1e3?Math.round(a/1e3)+'rb':String(a); };
+  let cells=''; for(let i=0;i<lead;i++) cells+='<span class="cal-c empty"></span>';
+  for(let d=1; d<=dim; d++){ const iso=m+'-'+String(d).padStart(2,'0'); const v=day[iso]; const fut=iso>TODAY;
+    const heat = v&&v.out ? Math.min(1, v.out/(p90||1)) : 0;
+    cells+=`<button class="cal-c ${iso===TODAY?'today':''} ${fut?'fut':''}" ${fut&&!v?'disabled':''} data-act="calDay" data-d="${iso}" style="--h:${heat.toFixed(2)}"><span class="cal-d">${d}</span>${v&&v.out?`<span class="cal-o">−${k(v.out)}</span>`:''}${v&&v.in?`<span class="cal-i">+${k(v.in)}</span>`:''}</button>`; }
+  const tot=Object.values(day).reduce((a,d)=>({out:a.out+d.out,in:a.in+d.in}),{out:0,in:0}); const active=Object.values(day).filter(d=>d.out).length;
+  const zero = m===CUR_MONTH ? TODAY_DAY-active : dim-active;
+  return `<section class="tray">${trayH('Aktivitas bulan ini',`<button class="ibtn" data-act="calMonth" data-d="-1" ${i0<=0?'disabled style="opacity:.4"':''} aria-label="Bulan sebelumnya">${I('back','sm')}</button><button class="ibtn" data-act="calMonth" data-d="1" ${i0>=ms.length-1?'disabled style="opacity:.4"':''} aria-label="Bulan berikutnya">${I('fwd','sm')}</button>`,fMonth(m)+' · ketuk tanggal untuk lihat transaksi')}<div class="card pad">
+    <div class="cal">${['SN','SL','RB','KM','JM','SB','MG'].map(x=>`<span class="cal-w">${x}</span>`).join('')}${cells}</div>
+    <div class="cal-f mut"><span>Keluar <b class="m neg">${rpc(tot.out)}</b> · Masuk <b class="m pos">${rpc(tot.in)}</b></span><span>${zero>0?`${zero} hari tanpa pengeluaran`:'Tiap hari ada pengeluaran'}</span></div>
+  </div></section>`;
 }
 
 function trayCashflow(){
