@@ -44,7 +44,7 @@ async function loadAll(){
   MEMBERS = {};
   mem.sort((a,b)=>a.created_at<b.created_at?-1:1).forEach(m=>{
     MEMBERS[m.id] = { id:m.id, name:m.display_name, email:m.email, color:m.color_idx||0, userId:m.user_id,
-      defWallet: m.default_wallet_id || firstWallet?.id || null, telegram:m.telegram_user_id };
+      defWallet: m.default_wallet_id || null, /* kosong = otomatis dompet tersering */ telegram:m.telegram_user_id };
   });
   const budgetOverride = {};
   bo.forEach(o=>{ (budgetOverride[o.month]=budgetOverride[o.month]||{})[o.category_id||'__total']=num(o.amount); });

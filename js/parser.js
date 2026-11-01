@@ -128,7 +128,7 @@ function parseUtterance(text, owner){
   // dompet
   let wallet=null, to=null, wConf='low';
   const firstW = (S.wallets.find(w=>!w.archived)||{}).id || null;
-  const def = MEMBERS[owner]?.defWallet || firstW;
+  const def = (typeof defWallet==='function' ? defWallet(owner) : null) || MEMBERS[owner]?.defWallet || firstW;
   const cashW = (S.wallets.find(w=>w.type==='cash' && !w.archived)||{}).id || null;
   if(type==='transfer'){
     const keIdx = s.search(/\b(ke|top ?up|isi saldo)\b/);

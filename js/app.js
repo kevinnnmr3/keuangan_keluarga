@@ -153,7 +153,7 @@ function txHint(){
 const amountField = (v,af=true) => `<div class="amount-in"><span>Rp</span><input name="amount" inputmode="numeric" placeholder="0" value="${v?idn(v):''}" data-money ${af?'autofocus':''} aria-label="Jumlah"></div><div class="quick">${[10000,25000,50000,100000,500000].map(q=>`<button type="button" data-act="qamt" data-v="${q}">+${rpc(q).replace('Rp ','')}</button>`).join('')}</div>`;
 function formData(form){ const o={}; new FormData(form).forEach((v,k)=>o[k]=v); return o; }
 function formErr(form,msg){ let e=form.querySelector('.ferr'); if(!e){ e=document.createElement('p'); e.className='note ferr'; e.style.color='var(--neg)'; const sb=form.querySelector('[type=submit]'); if(sb) sb.before(e); else form.appendChild(e); } e.textContent=msg; return false; }
-const defWallet = () => { const d=MEMBERS[S.user]?.defWallet; return (d && S.wallets.find(w=>w.id===d && !w.archived)) ? d : (S.wallets.find(w=>!w.archived)||{}).id; };
+const defWallet = (member) => { const d=MEMBERS[member||S.user]?.defWallet; return (d && S.wallets.find(w=>w.id===d && !w.archived)) ? d : (walletOrder(balances(null))[0]||{}).id; };
 function needWallet(){ if(S.wallets.some(w=>!w.archived)) return false; toast('Tambah dompet dulu supaya transaksi punya sumber dana.', true); sheetWalletForm(); return true; }
 
 /* ---------- sheet: catat / ubah transaksi ---------- */
@@ -637,7 +637,7 @@ const FORMS = {
     run(()=>DB.addRecurring({ name:fd.name.trim(), type:fd.type, amount, wallet:fd.wallet, to:fd.to||null, cat:fd.cat||null, day, owner:fd.owner }),'Transaksi berulang ditambahkan'); },
   invite: (f,fd) => { const email=fd.email.trim().toLowerCase(); if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return formErr(f,'Email tidak valid.'); if(Object.values(MEMBERS).some(m=>m.email.toLowerCase()===email)) return formErr(f,'Email ini sudah terdaftar.');
     run(()=>DB.inviteMember(email, fd.name.trim()||email.split('@')[0]),'Email diizinkan — minta ia daftar di website ini'); },
-  defWallet: (f,fd) => run(()=>DB.updateMember(S.user,{ default_wallet_id:fd.w }),'Dompet default disimpan'),
+  defWallet: (f,fd) => run(()=>DB.updateMember(S.user,{ default_wallet_id:fd.w||null }),'Dompet default disimpan'),
   simVN: (f,fd) => newDraft(fd.t, UI.simAs||S.user),
   tgSend: (f,fd) => newDraft(fd.t, S.user),
 };
