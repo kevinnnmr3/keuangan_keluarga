@@ -124,7 +124,13 @@ const parseAmt = v => Number(String(v||'').replace(/[^\d]/g,''))||0;
 const fmtInput = el => { const n=parseAmt(el.value); el.value = n? idn(n):''; };
 /* saldo tersedia per dompet; saat mengubah transaksi, efek transaksi itu dikeluarkan dulu */
 function availBalances(txId){ const b=balances(null); const t=txId&&S.txns.find(x=>x.id===txId); if(t) effects(t).forEach(e=>{ if(b[e.w]!==undefined) b[e.w]-=e.d; }); return b; }
-const walletChips = (name, sel, exclude, txId) => { const b=availBalances(txId); return `<div class="wsel" data-radio="${name}">${S.wallets.filter(w=>!w.archived && w.id!==exclude).map(w=>`<button type="button" class="${sel===w.id?'on':''}" data-val="${w.id}">${wDot(w.id)}<span>${esc(w.short)}<br><small class="mut m num ${b[w.id]<0?'neg':''}" style="font-weight:550">${rp(b[w.id])}</small></span></button>`).join('')}</div><input type="hidden" name="${name}" value="${sel||''}">`; };
+/* urutan pilihan dompet: yang paling sering dipakai (90 hari terakhir) di depan, sisanya saldo terbanyak */
+function walletOrder(b){
+  const since=dAdd(TODAY,-90), cnt={}; S.txns.forEach(t=>{ if(t.date<since) return; cnt[t.wallet]=(cnt[t.wallet]||0)+1; if(t.to) cnt[t.to]=(cnt[t.to]||0)+1; });
+  const act=S.wallets.filter(w=>!w.archived); const top=act.slice().sort((x,y)=>(cnt[y.id]||0)-(cnt[x.id]||0))[0];
+  return act.slice().sort((x,y)=> (y===top)-(x===top) || (b[y.id]||0)-(b[x.id]||0) || (x.sort||0)-(y.sort||0));
+}
+const walletChips = (name, sel, exclude, txId) => { const b=availBalances(txId); return `<div class="wsel" data-radio="${name}">${walletOrder(b).filter(w=>w.id!==exclude).map(w=>`<button type="button" class="${sel===w.id?'on':''}" data-val="${w.id}">${wDot(w.id)}<span>${esc(w.short)}<br><small class="mut m num ${b[w.id]<0?'neg':''}" style="font-weight:550">${rp(b[w.id])}</small></span></button>`).join('')}</div><input type="hidden" name="${name}" value="${sel||''}">`; };
 /* ringkasan langsung di form transaksi: saldo dompet & sisa budget setelah transaksi ini */
 function txHint(){
   const f=document.querySelector('.sheet [data-form=tx]'); const box=document.getElementById('tx-hint'); if(!f||!box) return;
