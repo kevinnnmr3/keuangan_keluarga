@@ -121,7 +121,9 @@ const monthLabel = m => isPartial(m) ? fMon(m)+' (1–'+TODAY_DAY+')' : fMon(m);
    Default 0 = tanpa budget (opsional). Total kosong = jumlah semua sub. */
 function budgetFor(m){
   const o = S.budgetOverride[m];
-  const cats = {}; leafCats('expense', true).forEach(c=> cats[c.id] = o ? (o[c.id]||0) : (c.budget||0));
+  // Bulan dengan budget khusus: pakai angka bulan itu. Kategori yang dibuat setelah budget khusus disusun (tidak ada barisnya)
+  // memakai budget default-nya, asal kategori itu sudah ada di bulan tersebut.
+  const cats = {}; leafCats('expense', true).forEach(c=> cats[c.id] = !o ? (c.budget||0) : (c.id in o) ? (o[c.id]||0) : (c.created && c.created.slice(0,7)<=m ? (c.budget||0) : 0));
   const sum = Object.values(cats).reduce((a,b)=>a+b,0);
   let total = o ? (o.__total||0) : (S.budgetTotal||0); const auto = !total; if(auto) total = sum;
   return { total, cats, sum, auto, overridden:!!o, any: total>0 };
