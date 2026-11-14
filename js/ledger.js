@@ -85,18 +85,18 @@ function inRange(t,m,uptoDay){ if(monthOf(t.date)!==m) return false; return !upt
 const fundSource = t => t.fundedFrom ? 'asset' : t.offBudget ? 'savings' : 'budget'; // luar budget ditandai per transaksi (default dari peran dompet saat dicatat)
 const offBudget = t => t.type==='expense' && fundSource(t)!=='budget';
 function flows(m,uptoDay){
-  let income=0, expense=0, budgetExp=0, savingsExp=0, assetExp=0; const byCat={}, byInc={}, byWallet={}, byGroup={}, byCatB={}, byGroupB={};
+  let income=0, expense=0, budgetExp=0, budgetFromSav=0, savingsExp=0, assetExp=0; const byCat={}, byInc={}, byWallet={}, byGroup={}, byCatB={}, byGroupB={};
   const add = (o,k,v) => o[k]=(o[k]||0)+v;
   S.txns.forEach(t=>{ if(!inRange(t,m,uptoDay)) return;
     if(t.type==='income'){ income+=t.amount; add(byInc,t.cat,t.amount); }
     if(t.type==='expense'){ expense+=t.amount; const g=groupOf(t.cat); const gid=g?g.id:'_';
       add(byCat,t.cat,t.amount); add(byGroup,gid,t.amount); add(byWallet,t.wallet,t.amount);
       const src=fundSource(t);
-      if(src==='budget'){ budgetExp+=t.amount; add(byCatB,t.cat,t.amount); add(byGroupB,gid,t.amount); }
+      if(src==='budget'){ budgetExp+=t.amount; add(byCatB,t.cat,t.amount); add(byGroupB,gid,t.amount); if((W(t.wallet).role||'budget')!=='budget') budgetFromSav+=t.amount; }
       else if(src==='savings') savingsExp+=t.amount; else assetExp+=t.amount; }
   });
   return { income, expense, net:income-expense, byCat, byInc, byWallet, byGroup, byCatB, byGroupB,
-    budgetExp, offExp:savingsExp+assetExp, savingsExp, assetExp, fromAsset:assetExp };
+    budgetExp, budgetFromSav, offExp:savingsExp+assetExp, savingsExp, assetExp, fromAsset:assetExp };
 }
 /* ---------- kebutuhan / keinginan / tabungan (per grup kategori) ---------- */
 const BUCKETS = { need:'Kebutuhan', want:'Keinginan', save:'Tabungan' };
