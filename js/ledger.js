@@ -85,18 +85,18 @@ function inRange(t,m,uptoDay){ if(monthOf(t.date)!==m) return false; return !upt
 const fundSource = t => t.fundedFrom ? 'asset' : t.offBudget ? 'savings' : 'budget'; // luar budget ditandai per transaksi (default dari peran dompet saat dicatat)
 const offBudget = t => t.type==='expense' && fundSource(t)!=='budget';
 function flows(m,uptoDay){
-  let income=0, expense=0, budgetExp=0, budgetFromSav=0, savingsExp=0, assetExp=0; const byCat={}, byInc={}, byWallet={}, byGroup={}, byCatB={}, byGroupB={};
+  let income=0, expense=0, budgetExp=0, budgetReserve=0, savingsExp=0, assetExp=0; const byCat={}, byInc={}, byWallet={}, byGroup={}, byCatB={}, byGroupB={};
   const add = (o,k,v) => o[k]=(o[k]||0)+v;
   S.txns.forEach(t=>{ if(!inRange(t,m,uptoDay)) return;
     if(t.type==='income'){ income+=t.amount; add(byInc,t.cat,t.amount); }
     if(t.type==='expense'){ expense+=t.amount; const g=groupOf(t.cat); const gid=g?g.id:'_';
       add(byCat,t.cat,t.amount); add(byGroup,gid,t.amount); add(byWallet,t.wallet,t.amount);
       const src=fundSource(t);
-      if(src==='budget'){ budgetExp+=t.amount; add(byCatB,t.cat,t.amount); add(byGroupB,gid,t.amount); if((W(t.wallet).role||'budget')!=='budget') budgetFromSav+=t.amount; }
+      if(src==='budget'){ budgetExp+=t.amount; add(byCatB,t.cat,t.amount); add(byGroupB,gid,t.amount); if(pocketOf(t.cat)==='reserve') budgetReserve+=t.amount; }
       else if(src==='savings') savingsExp+=t.amount; else assetExp+=t.amount; }
   });
   return { income, expense, net:income-expense, byCat, byInc, byWallet, byGroup, byCatB, byGroupB,
-    budgetExp, budgetFromSav, offExp:savingsExp+assetExp, savingsExp, assetExp, fromAsset:assetExp };
+    budgetExp, budgetReserve, offExp:savingsExp+assetExp, savingsExp, assetExp, fromAsset:assetExp };
 }
 /* ---------- kebutuhan / keinginan / tabungan (per grup kategori) ---------- */
 const BUCKETS = { need:'Kebutuhan', want:'Keinginan', save:'Tabungan' };
@@ -104,6 +104,9 @@ const BUCKET_BY_CODE = { g_tinggal:'need', g_rt:'need', g_nafkah:'need', g_trans
   g_makan:'want', g_personal:'want', g_rawat:'want', g_lain:'want' };
 function bucketOfGroup(g){ if(!g) return 'want'; return g.bucket || BUCKET_BY_CODE[g.code] || (/tabung|invest|nabung/i.test(g.label)?'save':'want'); }
 const bucketOf = catId => bucketOfGroup(groupOf(catId));
+/* kantong pembayar budget: 'main' = budget rutin (dompet harian), 'reserve' = budget dana darurat */
+const POCKETS = { main:'Budget rutin', reserve:'Budget dana darurat' };
+const pocketOf = catId => { const g=groupOf(catId); return (g && g.pocket) || 'main'; };
 /* Ringkasan per jenis untuk bulan m: terpakai (hanya yang dari budget) vs budget. Tabungan = sisa pemasukan + pos tabungan. */
 function bucketSummary(m, uptoDay){
   const f=flows(m, uptoDay), bud=budgetFor(m); const out={ need:{used:0,budget:0}, want:{used:0,budget:0}, save:{used:0,budget:0} };
@@ -126,7 +129,8 @@ function budgetFor(m){
   const cats = {}; leafCats('expense', true).forEach(c=> cats[c.id] = !o ? (c.budget||0) : (c.id in o) ? (o[c.id]||0) : (c.created && c.created.slice(0,7)<=m ? (c.budget||0) : 0));
   const sum = Object.values(cats).reduce((a,b)=>a+b,0);
   let total = o ? (o.__total||0) : (S.budgetTotal||0); const auto = !total; if(auto) total = sum;
-  return { total, cats, sum, auto, overridden:!!o, any: total>0 };
+  const reserve = Object.entries(cats).reduce((s,[id,v])=>s+(pocketOf(id)==='reserve'?v:0),0);
+  return { total, cats, sum, auto, overridden:!!o, any: total>0, reserve };
 }
 function groupBudget(g, bud){ const k=kidsOf(g.id,'expense',true); return k.length ? k.reduce((s,c)=>s+(bud.cats[c.id]||0),0) : (bud.cats[g.id]||0); }
 
