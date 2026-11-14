@@ -245,7 +245,7 @@ function trayWealth(series){
 }
 
 function fundSplit(f, compact){
-  const rows=[['var(--s1)','Dari budget bulanan',f.budgetExp,'Dompet berperan budget'],['var(--s4)','Dari tabungan / dana darurat',f.savingsExp,'Dompet tabungan/transit, atau ditandai luar budget'],['var(--s3)','Dari hasil jual aset',f.assetExp,'Ditandai saat mencatat']].filter((r,i)=>i===0||r[2]);
+  const rows=[['var(--s1)','Dari budget bulanan',f.budgetExp,'Termasuk yang ditalangi dompet tabungan'],['var(--s4)','Luar budget (tabungan / dana darurat)',f.savingsExp,'Ditandai luar budget saat dicatat'],['var(--s3)','Dari hasil jual aset',f.assetExp,'Ditandai saat mencatat']].filter((r,i)=>i===0||r[2]);
   return `<div class="comp" style="margin:0;height:12px">${rows.map(r=>`<span style="flex:${Math.max(r[2],0)};background:${r[0]}"></span>`).join('')}</div>
     <div class="alloc">${rows.map(r=>`<div><i class="sw" style="background:${r[0]}"></i><span>${r[1]}${compact?'':`<small class="mut" style="display:block;font-size:12px">${esc(r[3])}</small>`}</span><b class="m">${rpc(r[2])}</b><span class="mut" style="flex:none;width:42px;text-align:right">${f.expense?idn(r[2]/f.expense*100):0}%</span></div>`).join('')}
     <div style="border-top:1px solid var(--line);padding-top:8px"><span style="flex:1"><b>Total pengeluaran</b></span><b class="m">${rpc(f.expense)}</b><span style="flex:none;width:42px"></span></div></div>`;

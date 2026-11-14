@@ -135,9 +135,9 @@ const walletChips = (name, sel, exclude, txId) => { const b=availBalances(txId);
 function txHint(){
   const f=document.querySelector('.sheet [data-form=tx]'); const box=document.getElementById('tx-hint'); if(!f||!box) return;
   const fd=formData(f), amt=parseAmt(fd.amount), b=availBalances(fd.id||null); const lines=[];
-  if(fd.type==='expense'){ const forced = fd.wallet && (W(fd.wallet).role||'budget')!=='budget'; const off = forced || fd.fund==='off';
-    const fo=document.getElementById('fund-off'), ff=document.getElementById('fund-forced'), seg=f.querySelector('[data-radio-seg=fund]'), tf=document.getElementById('fund-tf');
-    if(fo) fo.hidden=!off; if(ff) ff.hidden=!forced; if(seg) seg.style.display=forced?'none':''; if(tf) tf.hidden=forced; fd.fund = off?'off':'budget'; fd._tf = !forced && off && fd.autoTf; }
+  if(fd.type==='expense'){ const savW = fd.wallet && (W(fd.wallet).role||'budget')!=='budget'; const off = fd.fund==='off';
+    const fo=document.getElementById('fund-off'), ff=document.getElementById('fund-forced'), tf=document.getElementById('fund-tf');
+    if(fo) fo.hidden=!off; if(ff) ff.hidden=!(savW && !off); if(tf) tf.hidden=savW; fd._tf = !savW && off && fd.autoTf; }
   const line=(lbl,before,after)=>`<div style="display:flex;justify-content:space-between;gap:10px"><span>${lbl}</span><span class="m num">${rp(before)} → <b class="${after<0?'neg':''}">${rp(after)}</b></span></div>`;
   if(fd._tf && fd.tfFrom && W(fd.tfFrom)){ const cur=b[fd.tfFrom]||0; lines.push(line('Saldo '+esc(W(fd.tfFrom).short)+' (transfer)',cur,cur-amt)); b[fd.wallet]=(b[fd.wallet]||0)+amt; }
   if(fd.wallet && W(fd.wallet)){ const w=W(fd.wallet), cur=b[fd.wallet]||0;
@@ -178,9 +178,9 @@ function sheetAdd(pre={}){
     <div class="frow"><div class="fld"><label for="tx-d">Tanggal</label><input class="inp" id="tx-d" type="date" name="date" value="${d.date}" min="${LEDGER_START}" max="${TODAY}"></div>
       <div class="fld"><label for="tx-o">Dicatat untuk</label><select class="inp" id="tx-o" name="owner">${memberOpts(d.owner||S.user)}</select></div></div>
     <div class="fld"><label for="tx-n">Catatan</label><input class="inp" id="tx-n" name="note" value="${esc(d.note)}" placeholder="mis. Superindo, bensin, gaji…" maxlength="80"></div>
-    ${d.type==='expense'?(()=>{ const off=d.offBudget||!!d.fundedFrom; const savW=S.wallets.filter(w=>!w.archived&&w.role==='savings'); return `<div class="fld"><span class="flbl">Sumber dana</span>
+    ${d.type==='expense'?(()=>{ const off = t ? (t.offBudget||!!t.fundedFrom) : (d.offBudget||!!d.fundedFrom||((W(d.wallet).role||'budget')!=='budget')); const savW=S.wallets.filter(w=>!w.archived&&w.role==='savings'); return `<div class="fld"><span class="flbl">Sumber dana</span>
       <div class="seg full" data-radio-seg="fund"><button type="button" class="${off?'':'on'}" data-act="segPick" data-k="budget">Budget bulanan</button><button type="button" class="${off?'on':''}" data-act="segPick" data-k="off">Luar budget</button></div><input type="hidden" name="fund" value="${off?'off':'budget'}">
-      <span class="note" id="fund-forced" hidden>Dompet ini di luar budget, jadi otomatis dihitung luar budget.</span></div>
+      <span class="note" id="fund-forced" hidden>Dibayar dari dompet tabungan/dana darurat tapi dihitung ke <b>budget</b> (ditalangi). Pilih "Luar budget" kalau ini memang di luar budget.</span></div>
       <div class="card pad form" id="fund-off" ${off?'':'hidden'} style="gap:10px">
         <div class="fld"><label for="tx-f">Uangnya dari</label><select class="inp" id="tx-f" name="fundedFrom"><option value="">Tabungan / dana darurat</option>${sells.map(s=>`<option value="${s.id}" ${d.fundedFrom===s.id?'selected':''}>Hasil jual: ${esc(s.note)} · ${fDate(s.date)}</option>`).join('')}</select></div>
         ${!t&&savW.length?`<label id="fund-tf" style="display:flex;gap:10px;align-items:flex-start;cursor:pointer"><input type="checkbox" name="autoTf" value="1" style="width:20px;height:20px;margin-top:2px"><span class="note" style="margin:0">Sekalian catat <b>transfer</b> sebesar ini dari <select class="inp" name="tfFrom" style="display:inline-block;width:auto;height:34px;padding:0 8px;margin:2px 0">${savW.map(w=>`<option value="${w.id}">${esc(w.short)}</option>`).join('')}</select> ke dompet pembayar</span></label>`:''}
@@ -233,7 +233,7 @@ function sheetWalletForm(id){
     <div class="fld"><span class="flbl">Tampilan kartu</span><div class="wsel" data-radio="brand">${brands.map(b=>`<button type="button" class="${w.brand===b[0]?'on':''}" data-val="${b[0]}"><span class="wdot w-${b[0]}"></span>${b[1]}</button>`).join('')}</div><input type="hidden" name="brand" value="${w.brand}"></div>
     <div class="frow"><div class="fld"><label for="w-o">Pemilik</label><select class="inp" id="w-o" name="owner">${memberOpts(w.owner,true)}</select></div>
       <div class="fld"><label for="w-a">No. rekening / HP (opsional)</label><input class="inp" id="w-a" name="acct" value="${esc(w.acct||'')}" inputmode="numeric" maxlength="40" placeholder="—"></div></div>
-    <div class="fld"><label for="w-r">Peran dompet</label><select class="inp" id="w-r" name="role"><option value="budget" ${!w.role||w.role==='budget'?'selected':''}>Budget bulanan — pengeluaran memotong budget</option><option value="savings" ${w.role==='savings'?'selected':''}>Tabungan / dana darurat — luar budget, dihitung harta</option><option value="transit" ${w.role==='transit'?'selected':''}>Transit / lainnya — luar budget, tidak dihitung harta</option></select><span class="note">Pengeluaran dari dompet tabungan tetap masuk total pengeluaran bulan itu, tapi dipisahkan sebagai "luar budget".</span></div>
+    <div class="fld"><label for="w-r">Peran dompet</label><select class="inp" id="w-r" name="role"><option value="budget" ${!w.role||w.role==='budget'?'selected':''}>Budget bulanan — pengeluaran memotong budget</option><option value="savings" ${w.role==='savings'?'selected':''}>Tabungan / dana darurat — default luar budget, dihitung harta</option><option value="transit" ${w.role==='transit'?'selected':''}>Transit / lainnya — default luar budget, bukan harta</option></select><span class="note">Pengeluaran dari dompet tabungan tetap masuk total pengeluaran bulan itu, tapi dipisahkan sebagai "luar budget".</span></div>
     <div class="fld"><span class="flbl">Saldo awal</span><div class="amount-in"><span>Rp</span><input name="amount" inputmode="numeric" placeholder="0" data-money value="${id&&w.opening?idn(w.opening):''}"></div></div>
     <div class="fld"><label for="w-d">Saldo di atas per tanggal (awal hari)</label><input class="inp" id="w-d" type="date" name="openingDate" value="${id?w.openingDate:(LEDGER_START<=TODAY?LEDGER_START:TODAY)}" min="${LEDGER_START}" max="${firstTx||TODAY}">
       <span class="note">${id?`Isi saldo yang benar-benar ada di rekening pada tanggal ini. Mengubahnya akan menghitung ulang saldo sekarang dari awal${firstTx?` — tanggal tidak boleh setelah transaksi pertama (${fDate(firstTx)})`:''}.`:`Pilih tanggal mulai pencatatan (mis. 1 ${MON[Number(CUR_MONTH.slice(5))-1]}), lalu catat transaksi sejak tanggal itu.`}</span></div>
@@ -479,7 +479,7 @@ const ACT = {
   copy: async (d,el) => { try{ await navigator.clipboard.writeText(d.t); toast('Disalin'); }catch(e){ const r=document.createRange(); const n=el.parentElement.querySelector('.num'); if(n){ r.selectNodeContents(n); const s=getSelection(); s.removeAllRanges(); s.addRange(r); } toast('Tekan lama untuk menyalin', true); } },
   voiceAdd: () => { closeSheet(); UI.inboxTab='queue'; go('inbox'); voiceStart('sim'); },
   recurringForm: ()=>sheetRecurringForm(),
-  segPick: (d,el) => { const seg=el.parentElement; seg.querySelectorAll('button').forEach(b=>b.classList.toggle('on',b===el)); el.closest('form').querySelector(`[name=${seg.dataset.radioSeg}]`).value=d.k; if(el.closest('[data-form=tx]')) txHint(); },
+  segPick: (d,el) => { const seg=el.parentElement; seg.querySelectorAll('button').forEach(b=>b.classList.toggle('on',b===el)); el.closest('form').querySelector(`[name=${seg.dataset.radioSeg}]`).value=d.k; if(el.closest('[data-form=tx]')){ if(seg.dataset.radioSeg==='fund') el.closest('form').dataset.fundTouched='1'; txHint(); } },
   toggleRecurring: d => { const r=S.recurring.find(x=>x.id===d.id); run(()=>DB.toggleRecurring(d.id,!r.active)); },
   postRecurring: d => { const r=S.recurring.find(x=>x.id===d.id); const date=CUR_MONTH+'-'+String(Math.min(r.day,TODAY_DAY)).padStart(2,'0');
     run(()=>DB.addTxn({ date, type:r.type, amount:r.amount, wallet:r.wallet, to:r.to, cat:r.cat, note:r.name, owner:r.owner||S.user, recurring:r.id }), r.name+' tercatat'); },
@@ -550,8 +550,8 @@ const FORMS = {
     }catch(e){ err.textContent=errMsg(e); btn.disabled=false; }
   },
   tx: (f,fd) => {
-    const forcedOff = fd.type==='expense' && fd.wallet && (W(fd.wallet).role||'budget')!=='budget';
-    const off = fd.type==='expense' && (forcedOff || fd.fund==='off');
+    const forcedOff = fd.type==='expense' && fd.wallet && (W(fd.wallet).role||'budget')!=='budget';   // dompet tabungan: tidak bisa sekalian transfer
+    const off = fd.type==='expense' && fd.fund==='off';
     const o={ type:fd.type, amount:parseAmt(fd.amount), wallet:fd.wallet, to:fd.type==='transfer'?fd.to:null, cat:fd.type==='transfer'?null:fd.cat, date:fd.date, owner:fd.owner,
       fundedFrom: off ? (fd.fundedFrom||null) : null, offBudget: off && !fd.fundedFrom };
     if(txValid(f,o)!==true) return;
@@ -665,7 +665,7 @@ function voiceStart(target){
 /* ---------- event delegation ---------- */
 document.addEventListener('click', e=>{
   const radio = e.target.closest('[data-radio] [data-val]');
-  if(radio){ const wrap=radio.closest('[data-radio]'); wrap.querySelectorAll('[data-val]').forEach(b=>b.classList.toggle('on',b===radio)); const inp=wrap.parentElement.querySelector(`input[name="${wrap.dataset.radio}"]`); if(inp) inp.value=radio.dataset.val; if(radio.closest('[data-form=tx]')) txHint(); return; }
+  if(radio){ const wrap=radio.closest('[data-radio]'); wrap.querySelectorAll('[data-val]').forEach(b=>b.classList.toggle('on',b===radio)); const inp=wrap.parentElement.querySelector(`input[name="${wrap.dataset.radio}"]`); if(inp) inp.value=radio.dataset.val; if(radio.closest('[data-form=tx]')){ const f=radio.closest('form'); if(wrap.dataset.radio==='wallet' && f.querySelector('[name=fund]') && !f.dataset.fundTouched){ const off=(W(radio.dataset.val).role||'budget')!=='budget'; f.querySelector('[name=fund]').value=off?'off':'budget'; f.querySelectorAll('[data-radio-seg=fund] button').forEach(b=>b.classList.toggle('on', b.dataset.k===(off?'off':'budget'))); } txHint(); } return; }
   const a = e.target.closest('[data-act]'); if(!a) return;
   const fn = ACT[a.dataset.act]; if(fn){ e.preventDefault(); fn(a.dataset, a); }
 });

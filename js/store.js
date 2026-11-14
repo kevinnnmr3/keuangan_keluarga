@@ -81,7 +81,7 @@ const must = ({ data, error }) => { if(error) throw error; return data; };
 const toTxnRow = o => ({ date:o.date, type:o.type, amount:Math.round(o.amount), wallet_id:o.wallet, to_wallet_id:o.type==='transfer'?o.to:null,
   category_id:o.type==='transfer'?null:(o.cat||null), note:o.note||'', owner_member_id:o.owner||S.user, source:o.source||'app',
   funded_from:o.fundedFrom||null, recurring_id:o.recurring||null, investment_id:o.inv||null, receivable_id:o.recv||null,
-  debt_id:o.type==='expense'?(o.debt||null):null, off_budget:o.type==='expense'&&!!o.offBudget });
+  debt_id:o.type==='expense'?(o.debt||null):null, off_budget:o.type==='expense'&&(o.offBudget!==undefined ? !!o.offBudget : (W(o.wallet).role||'budget')!=='budget') });
 
 const debtRow = d => ({ name:d.name, lender:d.lender||null, total:Math.round(d.total), installment:Math.round(d.installment||0), tenor:d.tenor||null,
   start_month:d.start, paid_before:Math.round(d.paidBefore||0), category_id:d.cat||null, note:d.note||null });
