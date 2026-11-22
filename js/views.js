@@ -375,7 +375,10 @@ function vInvest(){
     tip: i=>`<div class="th">${ms[i]===CUR_MONTH?'Hari ini':'Akhir '+fMon(ms[i])}</div>${tipRow('','Nilai',rp(hist[i].value))}${tipRow('','Modal',rp(hist[i].cost))}${tipRow('','Unrealized',rp(hist[i].unreal,{sign:true}))}` };
   const types=Object.keys(INV_TYPES).filter(t=>p.byType[t]);
   CHARTS.alloc={ draw: el=>drawDonut(el,{values:types.map(t=>p.byType[t]),colors:types.map(t=>INV_TYPES[t].color),centerLabel:'Total',centerValue:rpc(p.value)}), tip:i=>`<div class="th">${INV_TYPES[types[i]].label}</div>${tipRow(INV_TYPES[types[i]].color,'Nilai',rp(p.byType[types[i]]))}${tipRow('','Porsi',idn(p.byType[types[i]]/p.value*100,1)+'%')}` };
-  const list=S.investments.filter(i=>UI.invFilter==='all'||i.type===UI.invFilter);
+  const held=S.investments.map(i=>({i,h:holding(i)})).filter(x=>UI.invFilter==='all'||x.i.type===UI.invFilter);
+  const isEmpty=x=>x.h.qty<=1e-9 && x.h.value<=0;
+  const nEmpty=held.filter(isEmpty).length;
+  const list=held.filter(x=>UI.invEmpty||!isEmpty(x)).sort((a,b)=>b.h.value-a.h.value);
   const bal=balances(null), sav=S.wallets.filter(w=>w.role==='savings'&&!w.archived);
   const hseg=[...sav.map((w,k)=>({l:w.short==='BSI'||sav.length===1?'Cash ('+w.short+')':w.short,v:bal[w.id],c:k?'var(--s5)':'var(--pos)'})), ...types.map(t=>({l:INV_TYPES[t].label,v:p.byType[t],c:INV_TYPES[t].color}))].filter(x=>x.v>0);
   const htot=hseg.reduce((a,x)=>a+x.v,0);
@@ -388,7 +391,7 @@ function vInvest(){
   return `<div class="cols"><div class="col">
     ${hartaTray}
     <section class="tray">${trayH('Portofolio',`<div class="seg"><button class="${!ret?'on':''}" data-act="invMode" data-k="value">Nilai</button><button class="${ret?'on':''}" data-act="invMode" data-k="return">Return</button></div>`)}<div class="card">
-      <div class="ovw"><div class="v">${ret?`<span class="${p.unreal>=0?'pos':'neg'}">${M(p.unreal,{sign:true})}</span>`:M(p.value)}</div><div class="mut" style="font-size:13.5px;margin-top:2px">${ret?`${pctS(p.unrealPct)} dari modal ${rpc(p.cost)}`:`Modal ${rpc(p.cost)} · ${S.investments.length} aset`}</div>
+      <div class="ovw"><div class="v">${ret?`<span class="${p.unreal>=0?'pos':'neg'}">${M(p.unreal,{sign:true})}</span>`:M(p.value)}</div><div class="mut" style="font-size:13.5px;margin-top:2px">${ret?`${pctS(p.unrealPct)} dari modal ${rpc(p.cost)}`:`Modal ${rpc(p.cost)} · ${S.investments.filter(i=>holding(i).qty>1e-9).length} aset`}</div>
       <div class="chart" data-chart="port" style="margin-top:12px"></div></div>
       <div class="sgrid">
         <div><div class="k">Total modal</div><div class="v m">${rp(p.cost)}</div></div>
@@ -402,7 +405,8 @@ function vInvest(){
   </div><div class="col">
     <section class="tray">${trayH('Aset',`<button class="ibtn" data-act="invForm" aria-label="Tambah investasi">${I('plus','sm')}</button>`)}
       <div class="chips" style="padding:0 6px 10px">${[['all','Semua'],...Object.entries(INV_TYPES).map(([k,v])=>[k,v.label])].map(o=>`<button class="chip ${UI.invFilter===o[0]?'on':''}" data-act="invFilter" data-k="${o[0]}">${o[1]}</button>`).join('')}</div>
-      <div class="card list">${list.map(i=>{ const h=holding(i); return `<button class="row" data-act="go" data-v="invDetail" data-p="${i.id}"><span class="tile">${i.icon}</span><div class="mid"><div class="t1">${esc(i.symbol||i.name)}</div><div class="t2">${i.type==='deposit'?esc(i.sub):`${idn(h.qty,h.qty%1?2:0)} ${esc(i.unit)} · @ ${rp(h.price)}`}</div></div><div style="text-align:right"><div class="m num" style="font-weight:700">${rpc(h.value)}</div><div class="delta ${h.unreal>0?'gup':h.unreal<0?'gdn':'flat'}">${i.type==='deposit'?'bunga → pemasukan':pctS(h.unrealPct)}</div></div></button>`; }).join('')||'<div class="empty">Belum ada aset di kategori ini.</div>'}</div>
+      <div class="card list">${list.map(({i,h})=>{ return `<button class="row" data-act="go" data-v="invDetail" data-p="${i.id}"><span class="tile">${i.icon}</span><div class="mid"><div class="t1">${esc(i.symbol||i.name)}</div><div class="t2">${i.type==='deposit'?esc(i.sub):`${idn(h.qty,h.qty%1?2:0)} ${esc(i.unit)} · @ ${rp(h.price)}`}</div></div><div style="text-align:right"><div class="m num" style="font-weight:700">${rpc(h.value)}</div><div class="delta ${h.unreal>0?'gup':h.unreal<0?'gdn':'flat'}">${i.type==='deposit'?'bunga → pemasukan':pctS(h.unrealPct)}</div></div></button>`; }).join('')||'<div class="empty">Belum ada aset di kategori ini.</div>'}</div>
+      ${nEmpty?`<button class="btn sm" style="margin:10px auto 0;display:flex" data-act="invEmpty">${UI.invEmpty?'Sembunyikan':'Tampilkan'} ${nEmpty} aset kosong</button>`:''}
     </section>
   </div></div>`;
 }
